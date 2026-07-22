@@ -81,7 +81,8 @@
     padding:14px 16px; position:relative; overflow:hidden;
   }
   .card.onair{border-color:rgba(232,67,58,.5);}
-  .card-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;}
+  .card-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; gap:8px;}
+  .card-top-title{min-width:0; flex:1 1 auto;}
   .studio-name{font-size:17px; font-weight:700;}
   .broadcast-name{
     font-size:11px; color:var(--muted); margin-top:2px; max-width:100%;
@@ -699,7 +700,7 @@ function buildCards(){
   grid.innerHTML = STUDIO_LIST.map(studio => `
     <div class="card" id="card-${studio}">
       <div class="card-top">
-        <div>
+        <div class="card-top-title">
           <div class="studio-name">${studio}</div>
           <div class="broadcast-name" id="name-${studio}" style="display:none;"></div>
         </div>
