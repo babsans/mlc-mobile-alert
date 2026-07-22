@@ -308,6 +308,9 @@ testAlertBtn.addEventListener('click', () => {
 // 이 공개키는 비밀이 아님 - Push 발송 서버(GitHub Actions)가 가진 비밀키와 짝이 맞아야
 // 실제 발송이 되는 값이라 여기 그대로 노출해도 안전함.
 const VAPID_PUBLIC_KEY = 'BJo8c1y7IGWEO09zWDTCAC97ozvuc4Ty27DQrzhwZPJgmQd6PQ4tXQDpZzgzA-dVHGS2E4DfUNdgP-EukETy42I';
+// Cloudflare Worker 주소 - 만들고 나면 이 값만 채우면 자동등록으로 전환됨.
+// 비워두면(빈 문자열이면) 자동으로 예전처럼 "복사해서 붙여넣기" 방식으로 동작함.
+const SUBSCRIBE_WORKER_URL = 'https://mlc-subscribe.babsan85.workers.dev';
 
 function urlBase64ToUint8Array(base64String){
   const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -344,6 +347,26 @@ subscribeBtn.addEventListener('click', async () => {
       });
     }
     subText.value = JSON.stringify(sub.toJSON(), null, 2);
+
+    if(SUBSCRIBE_WORKER_URL){
+      // 자동등록 시도 - Worker가 GitHub subscriptions.json에 직접 저장해줌
+      try{
+        const res = await fetch(SUBSCRIBE_WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub.toJSON()),
+        });
+        if(res.ok){
+          showToast('✅ 방송예고 알림 등록 완료! (자동)');
+          return;
+        }
+        throw new Error('서버 응답 오류: ' + res.status);
+      }catch(e){
+        console.warn('자동등록 실패, 수동복사로 전환:', e);
+        // 자동등록이 안 되면 예전 방식(복사해서 붙여넣기)으로 그대로 이어감
+      }
+    }
+
     subPanel.style.display = 'block';
     subText.select();
   }catch(e){
