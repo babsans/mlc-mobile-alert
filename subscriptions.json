@@ -172,5 +172,21 @@
       "blackFrameEnabled": true,
       "overrides": {}
     }
+  },
+  {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/c9sXWr9UKjY:APA91bHD2fXTNdoJD6rm0kohenv1xXBQNGuH9AikgK1hWeASV4USau3nhYFFGKx86hBS0WvrVYwFKEOTud5uFthxwO8lN8-nFUFmHGIAmYqkpXtpzTWiyszW44KpM6D7SlMR8BcZ08Io",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BMKJUmqeFd-XjubF_PUfNGotsel9Y3BgiV0Bexd6MH_eVdPLAJCxkiHmxamReA4PycTbcBhNRB9FO3DoDOwr8kw",
+      "auth": "KldNxUNht_dV0x8YwKE7-Q"
+    },
+    "settings": {
+      "liveEnabled": true,
+      "liveThreshold": 30,
+      "rerunEnabled": true,
+      "signalLossEnabled": true,
+      "blackFrameEnabled": true,
+      "overrides": {}
+    }
   }
 ]
