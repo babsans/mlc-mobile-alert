@@ -370,6 +370,26 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW 등록 실패', e));
 }
 
+async function updateSubscribeBtnUI(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    subscribeBtn.textContent = '🔔 꺼져있어도 알림받기 (이 브라우저는 미지원)';
+    subscribeBtn.className = 'alert-btn warn';
+    return;
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(sub){
+      subscribeBtn.textContent = '✅ 꺼져있어도 알림받기 (등록됨)';
+      subscribeBtn.className = 'alert-btn on';
+    }else{
+      subscribeBtn.textContent = '🔔 꺼져있어도 알림받기';
+      subscribeBtn.className = 'alert-btn';
+    }
+  }catch(e){ /* 상태 확인 실패시 그냥 기본 표시 유지 */ }
+}
+updateSubscribeBtnUI();
+
 subscribeBtn.addEventListener('click', async () => {
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){
     showToast('이 브라우저는 꺼져있어도 알림받기(Push) 기능을 지원하지 않습니다.');
@@ -389,6 +409,7 @@ subscribeBtn.addEventListener('click', async () => {
       });
     }
     subText.value = JSON.stringify(sub.toJSON(), null, 2);
+    await updateSubscribeBtnUI();
 
     if(SUBSCRIBE_WORKER_URL){
       // 자동등록 시도 - Worker가 GitHub subscriptions.json에 직접 저장해줌
