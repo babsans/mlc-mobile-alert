@@ -4,6 +4,9 @@ on:
     - cron: '*/5 * * * *'   # 5분마다 (GitHub Actions 특성상 정확한 5분 보장은 아님)
   workflow_dispatch:         # 수동 실행 버튼 (테스트용)
 
+permissions:
+  contents: write   # alerted-log.json을 커밋해서 다시 저장소에 저장하려면 필요
+
 jobs:
   check-and-notify:
     runs-on: ubuntu-latest
@@ -17,4 +20,11 @@ jobs:
         env:
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-        run: node send-alerts.js   # TODO: 다음 세션에서 작성
+        run: node send-alerts.js
+      - name: 발송 기록(alerted-log.json) 저장소에 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add alerted-log.json
+          git diff --cached --quiet || git commit -m "알림 발송 기록 업데이트 [skip ci]"
+          git push
