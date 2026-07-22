@@ -21,7 +21,7 @@
   "V1_slave": false,
   "V2_master": true,
   "V2_slave": false,
-  "V3_master": true,
+  "V3_master": false,
   "V3_slave": false,
   "ETC1_master": false,
   "ETC1_slave": false,
