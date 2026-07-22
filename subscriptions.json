@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/dP10LXC2JHA:APA91bHiP3OI3BfqO6LJOMayOmoHVdsPvUeWSQZFlcdiDd1AWAOwyU0-Ffb9Z5WH4-r-1BK8wVY402pnJqlXf6v1zyXJt3uTnM-A_pjxQpStWOy6Wb6ejZyM_q_O1U41ax29Lm2kgP6p",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BNfSezyqz2Zbk26FDgD9DWALKgu1KYZdC76FB5PpOOQXwlQnNF_TSOM84mSOqXocFK882Jt834mrsee_ng_VzoU",
+      "auth": "XvnJ5AKSS87eLU0uXwRuEA"
+    },
+    "settings": {
+      "liveEnabled": true,
+      "liveThreshold": 30,
+      "rerunEnabled": true,
+      "overrides": {}
+    }
+  }
+]
