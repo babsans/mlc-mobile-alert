@@ -429,7 +429,21 @@ async function updateSubscribeBtnUI(){
 }
 updateSubscribeBtnUI();
 
+let subscribeToggleBusy = false; // 연타 방지 - 처리 중일 때 또 눌리면 무시(등록/해제 요청이 꼬이는 버그 방지)
+
 subscribeBtn.addEventListener('click', async () => {
+  if(subscribeToggleBusy) return;
+  subscribeToggleBusy = true;
+  try{
+    await handleSubscribeToggle();
+  } finally {
+    subscribeToggleBusy = false;
+  }
+});
+
+async function handleSubscribeToggle(){
+  subPanel.style.display = 'none'; // 이전 클릭에서 남아있던 안내패널이 있으면 먼저 초기화
+
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){
     showToast('이 브라우저는 꺼져있어도 알림받기(Push) 기능을 지원하지 않습니다.');
     return;
@@ -499,7 +513,7 @@ subscribeBtn.addEventListener('click', async () => {
     console.error(e);
     showToast('구독 생성 실패: ' + e.message);
   }
-});
+}
 
 subCopyBtn.addEventListener('click', async () => {
   try{
