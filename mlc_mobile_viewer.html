@@ -50,6 +50,17 @@
     display:none; align-items:center; justify-content:space-between; gap:8px;
   }
   .alert-toast button{background:none; border:none; color:#fff; font-size:14px; padding:0 4px;}
+
+  .sub-panel{
+    margin:0 14px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; font-size:11px; color:var(--muted); line-height:1.6;
+  }
+  .sub-panel code{color:var(--text); background:var(--panel-2); padding:1px 4px; border-radius:4px;}
+  .sub-panel textarea{
+    width:100%; height:90px; margin:8px 0; background:var(--panel-2); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:8px; font-size:10px;
+    font-family:inherit; resize:vertical;
+  }
   main{padding:6px 14px 40px;}
   .grid{display:grid; grid-template-columns:1fr; gap:10px;}
   @media(min-width:520px){ .grid{grid-template-columns:1fr 1fr;} }
@@ -139,12 +150,21 @@
     <button class="alert-btn" id="notifyBtn">🔔 신호끊김 알림 꺼짐</button>
     <button class="alert-btn" id="wakeBtn">📱 화면유지 꺼짐</button>
     <button class="alert-btn" id="testAlertBtn">🧪 알림 테스트</button>
+    <button class="alert-btn" id="subscribeBtn">📅 방송예고 구독</button>
   </div>
 </header>
 
 <div class="alert-toast" id="alertToast">
   <span id="alertToastMsg"></span>
   <button id="alertToastClose">✕</button>
+</div>
+
+<div class="sub-panel" id="subPanel" style="display:none;">
+  <p>방송예고(30/15/10/5분 전) 알림을 받으려면, 아래 내용을 통째로 복사해서
+  GitHub 저장소의 <code>subscriptions.json</code> 파일에 추가해달라고 하면 됨
+  (배열 안에 항목 하나로 추가).</p>
+  <textarea id="subText" readonly></textarea>
+  <button class="alert-btn" id="subCopyBtn">📋 복사하기</button>
 </div>
 
 <main>
@@ -281,6 +301,65 @@ wakeBtn.addEventListener('click', async () => {
 
 testAlertBtn.addEventListener('click', () => {
   fireSignalAlert('테스트', 'MASTER');
+});
+
+// --- 2단계 방송예고: Push 구독 생성 (처음엔 수동 등록 - 구독 정보를 화면에 보여주고
+// GitHub의 subscriptions.json에 수동으로 추가하는 방식) ---
+// 이 공개키는 비밀이 아님 - Push 발송 서버(GitHub Actions)가 가진 비밀키와 짝이 맞아야
+// 실제 발송이 되는 값이라 여기 그대로 노출해도 안전함.
+const VAPID_PUBLIC_KEY = 'BJo8c1y7IGWEO09zWDTCAC97ozvuc4Ty27DQrzhwZPJgmQd6PQ4tXQDpZzgzA-dVHGS2E4DfUNdgP-EukETy42I';
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+const subscribeBtn = document.getElementById('subscribeBtn');
+const subPanel = document.getElementById('subPanel');
+const subText = document.getElementById('subText');
+const subCopyBtn = document.getElementById('subCopyBtn');
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW 등록 실패', e));
+}
+
+subscribeBtn.addEventListener('click', async () => {
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    showToast('이 브라우저는 방송예고 알림(Push)을 지원하지 않습니다.');
+    return;
+  }
+  if(Notification.permission !== 'granted'){
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted'){ showToast('알림 권한을 허용해야 방송예고 알림을 받을 수 있습니다.'); return; }
+  }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    subText.value = JSON.stringify(sub.toJSON(), null, 2);
+    subPanel.style.display = 'block';
+    subText.select();
+  }catch(e){
+    console.error(e);
+    showToast('구독 생성 실패: ' + e.message);
+  }
+});
+
+subCopyBtn.addEventListener('click', async () => {
+  try{
+    await navigator.clipboard.writeText(subText.value);
+    showToast('복사됨 - GitHub의 subscriptions.json에 붙여넣어줘.');
+  }catch(e){
+    subText.select();
+    showToast('자동복사 실패 - 텍스트 길게눌러 직접 복사해줘.');
+  }
 });
 
 // 화면을 다시 보게 되면(백그라운드→포그라운드) 화면유지를 재요청함 - 브라우저가
