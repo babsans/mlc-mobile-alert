@@ -1,0 +1,27 @@
+name: 신호끊김 알림 발송
+on:
+  workflow_dispatch:
+    inputs:
+      studio:
+        description: '신호가 끊긴 스튜디오 (예: M2)'
+        required: true
+      side:
+        description: 'MASTER 또는 SLAVE'
+        required: true
+
+jobs:
+  send-signal-loss-alert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install web-push
+      - name: 신호끊김 Push 발송
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          STUDIO: ${{ github.event.inputs.studio }}
+          SIDE: ${{ github.event.inputs.side }}
+        run: node signal-loss-send.js
