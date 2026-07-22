@@ -1,8 +1,8 @@
 name: MLC 방송예고 알림
 on:
-  schedule:
-    - cron: '*/5 * * * *'   # 5분마다 (GitHub Actions 특성상 정확한 5분 보장은 아님)
-  workflow_dispatch:         # 수동 실행 버튼 (테스트용)
+  # GitHub 자체 schedule(cron)은 부하가 몰리면 몇 분~몇십 분씩 밀리는 경우가 흔해서 뺐음.
+  # 대신 Cloudflare Worker가 1분마다 안정적으로 이 워크플로를 깨워줌(workflow_dispatch).
+  workflow_dispatch:
 
 permissions:
   contents: write   # alerted-log.json / blackframe-state.json을 커밋해서 저장소에 저장하려면 필요
