@@ -887,6 +887,7 @@ async function fetchAndRender(){
         title: it.bdTit || '',
         mainUrl: it.mainRecvUrl || null,
         subUrl: it.subRecvUrl || null,
+        scheEndDtm: it.scheEndDtm || null,
       };
       // 같은 스튜디오(mappNm)로 항목이 두 개 이상 올 수 있음 (예: 현재 방송 + 다음
       // 예정 방송이 동시에 내려오는 경우). 그냥 덮어쓰면 아직 시작 안 한/이미 끝난
@@ -941,12 +942,16 @@ async function fetchAndRender(){
       r.slave.innerHTML = fmtStudioRow('SLAVE', info ? info.slave : null);
 
       // 신호끊김 감지: 직전에 onair(정상 송출 중)였던 쪽이 이번엔 healthy=false가 되면
-      // 딱 한 번만 알림 (복구되기 전까지 재알림 안 함, 5초마다 스팸 방지)
+      // 딱 한 번만 알림 (복구되기 전까지 재알림 안 함, 5초마다 스팸 방지).
+      // 단, 편성 종료시각(scheEndDtm)이 지난 뒤에 신호가 꺼지는 건 정상적인 방송 종료이므로
+      // 알람 대상에서 제외함 (사고로 끊긴 것과 구분).
+      const scheEndTime = info && info.scheEndDtm ? new Date(info.scheEndDtm.replace(' ', 'T')).getTime() : null;
+      const pastScheduledEnd = scheEndTime !== null && Date.now() > scheEndTime;
       ['master','slave'].forEach(side => {
         const cur = info && info[side];
         const nowOnair = !!(cur && cur.onair);
         const nowHealthy = !!(cur && cur.healthy);
-        if(prevOnair[studio][side] && !nowHealthy && !alerted[studio][side]){
+        if(prevOnair[studio][side] && !nowHealthy && !alerted[studio][side] && !pastScheduledEnd){
           fireSignalAlert(studio, side === 'master' ? 'MASTER' : 'SLAVE');
           alerted[studio][side] = true;
         }
