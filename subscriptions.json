@@ -5,6 +5,12 @@
     "keys": {
       "p256dh": "BCNoTxSUu3xi7E7_7FAkO8GFw0VQtXljYyVPo6L7MRgHOdA4rzmQfKV4oAK7YOiPmatckRDnleRzLDg93n4Ltds",
       "auth": "hxYBKIp4FjaHTUNIf2SN9g"
+    },
+    "settings": {
+      "liveEnabled": true,
+      "liveThreshold": 30,
+      "rerunEnabled": true,
+      "overrides": {}
     }
   }
 ]
