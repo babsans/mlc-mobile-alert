@@ -17,7 +17,7 @@
   "C_slave": false,
   "E_master": false,
   "E_slave": false,
-  "V1_master": true,
+  "V1_master": false,
   "V1_slave": false,
   "V2_master": true,
   "V2_slave": false,
