@@ -161,7 +161,7 @@
     <button class="alert-btn" id="notifyBtn">🔔 신호끊김 알림 꺼짐</button>
     <button class="alert-btn" id="wakeBtn">📱 화면유지 꺼짐</button>
     <button class="alert-btn" id="testAlertBtn">🧪 알림 테스트</button>
-    <button class="alert-btn" id="subscribeBtn">📅 방송예고 구독</button>
+    <button class="alert-btn" id="subscribeBtn">🔔 꺼져있어도 알림받기</button>
     <button class="alert-btn" id="alarmSettingsBtn">⚙️ 알람 설정</button>
     <button class="alert-btn" id="scheduleBtn">📋 오늘 편성</button>
   </div>
@@ -197,7 +197,7 @@
 </div>
 
 <div class="sub-panel" id="subPanel" style="display:none;">
-  <p>방송예고(30/15/10/5분 전) 알림을 받으려면, 아래 내용을 통째로 복사해서
+  <p>앱을 꺼두거나 화면이 꺼져있어도 알림을 받으려면, 아래 내용을 통째로 복사해서
   GitHub 저장소의 <code>subscriptions.json</code> 파일에 추가해달라고 하면 됨
   (배열 안에 항목 하나로 추가).</p>
   <textarea id="subText" readonly></textarea>
@@ -514,6 +514,7 @@ function buildScheduleList(){
     if(!it.scheStrDtm) return;
     const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
     if(!name || !STUDIO_LIST.includes(name)) return;
+    if(name.startsWith('V')) return; // 재방송은 개별 방송알람 대상이 아님(오늘편성엔 라이브만 노출)
     rows.push({ studio: name, scheStrDtm: it.scheStrDtm, title: it.bdTit || '' });
   });
   rows.sort((a,b) => a.scheStrDtm.localeCompare(b.scheStrDtm));
