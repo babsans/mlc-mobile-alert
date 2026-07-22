@@ -1,1 +1,114 @@
-{}
+{
+  "M1_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M1_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M2_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M2_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M3_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M3_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M5_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M5_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M6_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M6_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "A_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "A_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "B_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "B_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "C_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "C_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "E_master": {
+    "onair": true,
+    "scheEndDtm": "2026-07-22T20:59:59+09:00"
+  },
+  "E_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V1_master": {
+    "onair": true,
+    "scheEndDtm": "2026-07-22T20:59:59+09:00"
+  },
+  "V1_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V2_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V2_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V3_master": {
+    "onair": true,
+    "scheEndDtm": "2026-07-22T20:59:59+09:00"
+  },
+  "V3_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC1_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC1_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC2_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC2_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  }
+}
