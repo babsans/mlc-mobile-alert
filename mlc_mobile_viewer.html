@@ -652,7 +652,10 @@ if(!isStandalone){
       installBtn.style.display = 'inline-flex';
     });
     installBtn.addEventListener('click', async () => {
-      if(!deferredInstallPrompt) return;
+      if(!deferredInstallPrompt){
+        showToast('이미 설치되어 있는 것 같습니다. 홈 화면의 아이콘을 사용해 주세요.');
+        return;
+      }
       deferredInstallPrompt.prompt();
       const { outcome } = await deferredInstallPrompt.userChoice;
       if(outcome === 'accepted') showToast('앱이 설치되었습니다.');
