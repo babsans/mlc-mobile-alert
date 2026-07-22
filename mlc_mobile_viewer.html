@@ -212,14 +212,6 @@
   <p style="color:var(--muted);">이후에는 홈 화면의 아이콘을 눌러 앱처럼 바로 열 수 있습니다.</p>
 </div>
 
-<div class="sub-panel" id="subPanel" style="display:none;">
-  <p>앱을 꺼두거나 화면이 꺼져있어도 알림을 받으시려면, 아래 내용을 통째로 복사하여
-  GitHub 저장소의 <code>subscriptions.json</code> 파일에 추가해 달라고 요청해 주세요.
-  (배열 안에 항목 하나로 추가)</p>
-  <textarea id="subText" readonly></textarea>
-  <button class="alert-btn" id="subCopyBtn">📋 복사하기</button>
-</div>
-
 <main>
   <div class="grid" id="grid"></div>
   <div class="empty" id="emptyState" style="display:none;"></div>
@@ -401,9 +393,6 @@ function urlBase64ToUint8Array(base64String){
 }
 
 const subscribeBtn = document.getElementById('subscribeBtn');
-const subPanel = document.getElementById('subPanel');
-const subText = document.getElementById('subText');
-const subCopyBtn = document.getElementById('subCopyBtn');
 
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW 등록 실패', e));
@@ -434,16 +423,18 @@ let subscribeToggleBusy = false; // 연타 방지 - 처리 중일 때 또 눌리
 subscribeBtn.addEventListener('click', async () => {
   if(subscribeToggleBusy) return;
   subscribeToggleBusy = true;
+  subscribeBtn.disabled = true;
+  subscribeBtn.style.opacity = '0.5';
   try{
     await handleSubscribeToggle();
   } finally {
     subscribeToggleBusy = false;
+    subscribeBtn.disabled = false;
+    subscribeBtn.style.opacity = '1';
   }
 });
 
 async function handleSubscribeToggle(){
-  subPanel.style.display = 'none'; // 이전 클릭에서 남아있던 안내패널이 있으면 먼저 초기화
-
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){
     showToast('이 브라우저는 꺼져있어도 알림받기(Push) 기능을 지원하지 않습니다.');
     return;
@@ -457,7 +448,6 @@ async function handleSubscribeToggle(){
       const endpoint = existingSub.toJSON().endpoint;
       await existingSub.unsubscribe();
       await updateSubscribeBtnUI();
-      subPanel.style.display = 'none';
       if(SUBSCRIBE_WORKER_URL){
         try{
           await fetch(SUBSCRIBE_WORKER_URL, {
@@ -485,45 +475,43 @@ async function handleSubscribeToggle(){
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
     }
-    subText.value = JSON.stringify(sub.toJSON(), null, 2);
     await updateSubscribeBtnUI();
 
-    if(SUBSCRIBE_WORKER_URL){
-      // 자동등록 시도 - Worker가 GitHub subscriptions.json에 직접 저장해줌
+    if(!SUBSCRIBE_WORKER_URL){
+      showToast('✅ 알림이 등록되었습니다.');
+      return;
+    }
+
+    // 자동등록 시도 - 실패하면 한 번 더 재시도(잠깐의 통신 충돌은 대부분 이걸로 해결됨)
+    const postOnce = async () => {
       try{
         const res = await fetch(SUBSCRIBE_WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...sub.toJSON(), settings: alarmSettings }),
         });
-        if(res.ok){
-          showToast('✅ 알림 등록이 완료되었습니다. (자동)');
-          return;
-        }
-        throw new Error('서버 응답 오류: ' + res.status);
-      }catch(e){
-        console.warn('자동등록 실패, 수동복사로 전환:', e);
-        // 자동등록이 안 되면 예전 방식(복사해서 붙여넣기)으로 그대로 이어감
-      }
+        return res.ok;
+      }catch(e){ return false; }
+    };
+    let ok = await postOnce();
+    if(!ok){
+      await new Promise(r => setTimeout(r, 1000));
+      ok = await postOnce();
+    }
+    if(ok){
+      showToast('✅ 알림 등록이 완료되었습니다.');
+      return;
     }
 
-    subPanel.style.display = 'block';
-    subText.select();
+    // 그래도 실패하면 로컬 구독도 되돌려서 "등록 안 됨" 상태로 맞춰둠(어중간한 상태 방지)
+    try{ await sub.unsubscribe(); }catch(e){}
+    await updateSubscribeBtnUI();
+    showToast('등록에 실패했습니다. 네트워크 상태를 확인하고 다시 시도해 주세요.');
   }catch(e){
     console.error(e);
     showToast('구독 생성 실패: ' + e.message);
   }
 }
-
-subCopyBtn.addEventListener('click', async () => {
-  try{
-    await navigator.clipboard.writeText(subText.value);
-    showToast('복사되었습니다 - GitHub의 subscriptions.json에 붙여넣어 주세요.');
-  }catch(e){
-    subText.select();
-    showToast('자동 복사에 실패했습니다 - 텍스트를 길게 눌러 직접 복사해 주세요.');
-  }
-});
 
 // --- 알람 개인화 설정 (기기별로 다르게 저장, 구독중이면 서버에도 동기화) ---
 const DEFAULT_ALARM_SETTINGS = { liveEnabled: true, liveThreshold: 30, rerunEnabled: true, signalLossEnabled: true, blackFrameEnabled: true, overrides: {} };
