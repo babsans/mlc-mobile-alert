@@ -1,0 +1,20 @@
+name: MLC 방송예고 알림
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # 5분마다 (GitHub Actions 특성상 정확한 5분 보장은 아님)
+  workflow_dispatch:         # 수동 실행 버튼 (테스트용)
+
+jobs:
+  check-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install web-push
+      - name: 대시보드 조회 후 조건 맞으면 Push 발송
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node send-alerts.js   # TODO: 다음 세션에서 작성
