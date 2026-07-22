@@ -190,6 +190,9 @@
   <label><input type="checkbox" id="rerunEnabledChk"> 켜짐</label>
   <p style="margin-top:10px;"><b>신호끊김 알람 (꺼져있어도)</b> - 방송 중 신호가 갑자기 끊기면 알려드립니다. (최대 1~2분 지연될 수 있음)</p>
   <label><input type="checkbox" id="signalLossEnabledChk"> 켜짐</label>
+  <p style="margin-top:10px;"><b>블랙화면 감지</b> - 연결은 정상인데 화면이 새까맣게 나가면 알려드립니다.<br>
+  (앱 켜짐: 실시간 / 앱 꺼짐: 최대 5분 지연)</p>
+  <label><input type="checkbox" id="blackFrameEnabledChk"> 켜짐</label>
   <div style="margin-top:10px;">
     <button class="alert-btn" id="alarmSettingsSaveBtn">저장</button>
   </div>
@@ -259,6 +262,30 @@ const prevOnair = {};   // studio -> {master: bool, slave: bool} - 직전 onair 
 const alerted = {};     // studio -> {master: bool, slave: bool} - 이미 알림 보냈는지(복구 전까지 중복 방지)
 const alertedBroadcast = {}; // "pre_스튜디오_시간_문턱" / "rerun_스튜디오_시간" -> true (방송예고/재방송 알림 중복방지)
 STUDIO_LIST.forEach(s => { prevOnair[s] = {master:false, slave:false}; alerted[s] = {master:false, slave:false}; });
+
+// --- 블랙화면 감지: 미리보기 영상이 계속 새까맣게 나오면 감지(연결은 정상이라 신호끊김으론 안 잡힘) ---
+const blackCanvas = document.createElement('canvas');
+const blackCtx = blackCanvas.getContext('2d', { willReadFrequently: true });
+const blackFrameCount = {};    // studio -> 연속으로 까맣게 감지된 횟수
+const blackFrameAlerted = {};  // studio -> 이미 알림 보냈는지(복구 전까지 중복 방지)
+const BLACK_THRESHOLD = 12;    // 평균 밝기(0~255)가 이 아래면 "까맣다"고 판단
+const BLACK_CONFIRM_TICKS = 3; // 이만큼 연속으로 까매야 알림(순간적인 암전은 무시)
+
+function sampleBrightness(videoEl){
+  try{
+    if(!videoEl || videoEl.readyState < 2 || !videoEl.videoWidth) return null;
+    const w = 16, h = 9;
+    blackCanvas.width = w; blackCanvas.height = h;
+    blackCtx.drawImage(videoEl, 0, 0, w, h);
+    const data = blackCtx.getImageData(0, 0, w, h).data;
+    let sum = 0;
+    for(let i = 0; i < data.length; i += 4) sum += (data[i] + data[i+1] + data[i+2]) / 3;
+    return sum / (data.length / 4);
+  }catch(e){
+    // 스트림 서버가 캔버스 픽셀 읽기를 막아두면(CORS) 여기서 막힘 - 이 기기에서는 감지 불가로 조용히 넘어감
+    return null;
+  }
+}
 
 function playAlertBeep(){
   try{
@@ -485,7 +512,7 @@ subCopyBtn.addEventListener('click', async () => {
 });
 
 // --- 알람 개인화 설정 (기기별로 다르게 저장, 구독중이면 서버에도 동기화) ---
-const DEFAULT_ALARM_SETTINGS = { liveEnabled: true, liveThreshold: 30, rerunEnabled: true, signalLossEnabled: true, overrides: {} };
+const DEFAULT_ALARM_SETTINGS = { liveEnabled: true, liveThreshold: 30, rerunEnabled: true, signalLossEnabled: true, blackFrameEnabled: true, overrides: {} };
 
 function loadAlarmSettings(){
   try{
@@ -530,6 +557,7 @@ const liveEnabledChk = document.getElementById('liveEnabledChk');
 const liveThresholdSel = document.getElementById('liveThresholdSel');
 const rerunEnabledChk = document.getElementById('rerunEnabledChk');
 const signalLossEnabledChk = document.getElementById('signalLossEnabledChk');
+const blackFrameEnabledChk = document.getElementById('blackFrameEnabledChk');
 const alarmSettingsSaveBtn = document.getElementById('alarmSettingsSaveBtn');
 
 alarmSettingsBtn.addEventListener('click', () => {
@@ -537,6 +565,7 @@ alarmSettingsBtn.addEventListener('click', () => {
   liveThresholdSel.value = String(alarmSettings.liveThreshold);
   rerunEnabledChk.checked = alarmSettings.rerunEnabled;
   signalLossEnabledChk.checked = alarmSettings.signalLossEnabled;
+  blackFrameEnabledChk.checked = alarmSettings.blackFrameEnabled;
   schedulePanel.style.display = 'none';
   alarmSettingsPanel.style.display = alarmSettingsPanel.style.display === 'block' ? 'none' : 'block';
 });
@@ -546,6 +575,7 @@ alarmSettingsSaveBtn.addEventListener('click', async () => {
   alarmSettings.liveThreshold = Number(liveThresholdSel.value);
   alarmSettings.rerunEnabled = rerunEnabledChk.checked;
   alarmSettings.signalLossEnabled = signalLossEnabledChk.checked;
+  alarmSettings.blackFrameEnabled = blackFrameEnabledChk.checked;
   saveAlarmSettingsLocal();
   await syncAlarmSettingsToServer();
   showToast('알람 설정이 저장되었습니다.');
@@ -785,6 +815,9 @@ function startVideo(studio, url, side){
   r.video.volume = videoPrefs[studio].volume;
   r.muteBtn.textContent = r.video.muted ? '🔇' : '🔊';
   r.volSlider.value = videoPrefs[studio].volume;
+  // 블랙화면 감지(캔버스로 프레임 밝기 읽기)가 CORS에 막히지 않도록 시도 - 스트림 서버가
+  // 허용 안 하면 sampleBrightness()에서 조용히 null 반환하고 넘어감
+  try{ r.video.crossOrigin = 'anonymous'; }catch(e){}
 
   if(r.video.canPlayType('application/vnd.apple.mpegurl')){
     // iOS Safari 등 - 네이티브 HLS 지원
@@ -965,6 +998,23 @@ async function fetchAndRender(){
         if(newSide) startVideo(studio, url, newSide);
         else stopVideo(studio);
         activeSide[studio] = newSide;
+      }
+
+      // 블랙화면 감지: 온에어(공식 방송 중)인 스튜디오의 재생 중인 영상만 확인
+      if(alarmSettings.blackFrameEnabled && isOnair && activeSide[studio]){
+        const brightness = sampleBrightness(r.video);
+        if(brightness !== null){
+          if(brightness < BLACK_THRESHOLD){
+            blackFrameCount[studio] = (blackFrameCount[studio] || 0) + 1;
+            if(blackFrameCount[studio] >= BLACK_CONFIRM_TICKS && !blackFrameAlerted[studio]){
+              fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상인데 화면이 까맣게 나오고 있습니다.`, `mlc-black-${studio}`);
+              blackFrameAlerted[studio] = true;
+            }
+          }else{
+            blackFrameCount[studio] = 0;
+            blackFrameAlerted[studio] = false; // 복구되면 다음에 또 까매질 때 다시 알릴 수 있게 초기화
+          }
+        }
       }
     });
 
