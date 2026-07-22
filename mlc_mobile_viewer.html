@@ -61,6 +61,17 @@
     border:1px solid var(--line); border-radius:8px; padding:8px; font-size:10px;
     font-family:inherit; resize:vertical;
   }
+  .sub-panel label{color:var(--text); display:inline-flex; align-items:center; gap:6px;}
+  .sub-panel select{
+    background:var(--panel-2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:4px 6px; font-size:11px;
+  }
+  .sched-row{border-bottom:1px solid var(--line); padding:8px 0;}
+  .sched-row:last-child{border-bottom:none;}
+  .sched-row-head{display:flex; justify-content:space-between; align-items:center; cursor:pointer; color:var(--text); font-size:11px;}
+  .sched-row-head .sched-time{color:var(--muted); margin-right:6px;}
+  .sched-row-body{display:none; margin-top:8px; padding-left:4px;}
+  .sched-row-body.open{display:block;}
   main{padding:6px 14px 40px;}
   .grid{display:grid; grid-template-columns:1fr; gap:10px;}
   @media(min-width:520px){ .grid{grid-template-columns:1fr 1fr;} }
@@ -151,12 +162,38 @@
     <button class="alert-btn" id="wakeBtn">📱 화면유지 꺼짐</button>
     <button class="alert-btn" id="testAlertBtn">🧪 알림 테스트</button>
     <button class="alert-btn" id="subscribeBtn">📅 방송예고 구독</button>
+    <button class="alert-btn" id="alarmSettingsBtn">⚙️ 알람 설정</button>
+    <button class="alert-btn" id="scheduleBtn">📋 오늘 편성</button>
   </div>
 </header>
 
 <div class="alert-toast" id="alertToast">
   <span id="alertToastMsg"></span>
   <button id="alertToastClose">✕</button>
+</div>
+
+<div class="sub-panel" id="alarmSettingsPanel" style="display:none;">
+  <p><b>라이브 방송 알람</b> - 방송 시작 전 신호가 없으면 알려줌</p>
+  <label><input type="checkbox" id="liveEnabledChk"> 켜짐</label>
+  <div style="margin:6px 0;">
+    시작
+    <select id="liveThresholdSel">
+      <option value="30">30분</option>
+      <option value="15">15분</option>
+      <option value="5">5분</option>
+    </select>
+    전, 신호 없으면 알람
+  </div>
+  <p style="margin-top:10px;"><b>재방송 알람</b> - 편성시간이 됐는데 영상이 안 뜨면 알려줌</p>
+  <label><input type="checkbox" id="rerunEnabledChk"> 켜짐</label>
+  <div style="margin-top:10px;">
+    <button class="alert-btn" id="alarmSettingsSaveBtn">저장</button>
+  </div>
+</div>
+
+<div class="sub-panel" id="schedulePanel" style="display:none;">
+  <p>오늘 편성 - 방송을 탭하면 그 방송만 개별로 알람을 설정할 수 있음</p>
+  <div id="scheduleList"></div>
 </div>
 
 <div class="sub-panel" id="subPanel" style="display:none;">
@@ -176,7 +213,7 @@
 
 <script>
 const API_URL = "https://mlc-api.cjoshopping.com/external/public/api/streamhistory/dashboard/v2/live";
-const STUDIO_LIST = ["M1","M2","M3","M5","M6","A","B","C","E","ETC1","ETC2"]; // M4는 이중화 대상 없음
+const STUDIO_LIST = ["M1","M2","M3","M5","M6","A","B","C","E","V1","V2","V3","ETC1","ETC2"]; // M4는 이중화 대상 없음, V4~V5는 오픈 전이라 일단 제외(준비되면 여기에 추가)
 const CHECK_INTERVAL = 5000; // ms
 
 const grid = document.getElementById('grid');
@@ -207,6 +244,7 @@ let wakeLock = null;
 let wakeEnabled = localStorage.getItem('mlc_wake_enabled') === '1';
 const prevOnair = {};   // studio -> {master: bool, slave: bool} - 직전 onair 상태
 const alerted = {};     // studio -> {master: bool, slave: bool} - 이미 알림 보냈는지(복구 전까지 중복 방지)
+const alertedBroadcast = {}; // "pre_스튜디오_시간_문턱" / "rerun_스튜디오_시간" -> true (방송예고/재방송 알림 중복방지)
 STUDIO_LIST.forEach(s => { prevOnair[s] = {master:false, slave:false}; alerted[s] = {master:false, slave:false}; });
 
 function playAlertBeep(){
@@ -234,15 +272,18 @@ function showToast(message){
 }
 alertToastClose.addEventListener('click', () => { alertToast.style.display = 'none'; });
 
-function fireSignalAlert(studio, sideLabel){
-  const message = `⚠ ${studio} ${sideLabel} 신호 끊김`;
-  showToast(message);
+function fireAlert(title, body, tag){
+  showToast(body);
   playAlertBeep();
   if(navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
   if(notifyEnabled && 'Notification' in window && Notification.permission === 'granted'){
-    try{ new Notification('MLC 신호끊김', { body: `${studio} 스튜디오 ${sideLabel} 신호가 끊겼습니다.`, tag: `mlc-${studio}-${sideLabel}` }); }
+    try{ new Notification(title, { body, tag }); }
     catch(e){ /* 일부 브라우저는 Notification 생성자 자체를 막을 수 있음 - 무시 */ }
   }
+}
+
+function fireSignalAlert(studio, sideLabel){
+  fireAlert('MLC 신호끊김', `${studio} 스튜디오 ${sideLabel} 신호가 끊겼습니다.`, `mlc-${studio}-${sideLabel}`);
 }
 
 async function updateNotifyBtnUI(){
@@ -354,7 +395,7 @@ subscribeBtn.addEventListener('click', async () => {
         const res = await fetch(SUBSCRIBE_WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sub.toJSON()),
+          body: JSON.stringify({ ...sub.toJSON(), settings: alarmSettings }),
         });
         if(res.ok){
           showToast('✅ 방송예고 알림 등록 완료! (자동)');
@@ -383,6 +424,150 @@ subCopyBtn.addEventListener('click', async () => {
     subText.select();
     showToast('자동복사 실패 - 텍스트 길게눌러 직접 복사해줘.');
   }
+});
+
+// --- 알람 개인화 설정 (기기별로 다르게 저장, 구독중이면 서버에도 동기화) ---
+const DEFAULT_ALARM_SETTINGS = { liveEnabled: true, liveThreshold: 30, rerunEnabled: true, overrides: {} };
+
+function loadAlarmSettings(){
+  try{
+    const raw = localStorage.getItem('mlc_alarm_settings');
+    if(!raw) return { ...DEFAULT_ALARM_SETTINGS, overrides:{} };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_ALARM_SETTINGS, ...parsed, overrides: parsed.overrides || {} };
+  }catch(e){ return { ...DEFAULT_ALARM_SETTINGS, overrides:{} }; }
+}
+let alarmSettings = loadAlarmSettings();
+
+function saveAlarmSettingsLocal(){
+  localStorage.setItem('mlc_alarm_settings', JSON.stringify(alarmSettings));
+}
+
+async function syncAlarmSettingsToServer(){
+  if(!SUBSCRIBE_WORKER_URL) return;
+  if(!('serviceWorker' in navigator)) return;
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(!sub) return; // 아직 구독 전이면 로컬 저장만 되고, 방송예고 구독시 같이 반영됨
+    await fetch(SUBSCRIBE_WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint: sub.toJSON().endpoint, settings: alarmSettings }),
+    });
+  }catch(e){ console.warn('설정 동기화 실패(로컬에는 저장됨):', e); }
+}
+
+// 특정 방송(studio+scheStrDtm)에 대해 개별 오버라이드가 있으면 그걸, 없으면 전역설정을 씀
+function effectiveLiveSetting(studio, scheStrDtm){
+  const ov = alarmSettings.overrides[`${studio}_${scheStrDtm}`];
+  if(ov === 'off') return { enabled:false, threshold:null };
+  if(ov) return { enabled:true, threshold:Number(ov) };
+  return { enabled: alarmSettings.liveEnabled, threshold: alarmSettings.liveThreshold };
+}
+
+const alarmSettingsBtn = document.getElementById('alarmSettingsBtn');
+const alarmSettingsPanel = document.getElementById('alarmSettingsPanel');
+const liveEnabledChk = document.getElementById('liveEnabledChk');
+const liveThresholdSel = document.getElementById('liveThresholdSel');
+const rerunEnabledChk = document.getElementById('rerunEnabledChk');
+const alarmSettingsSaveBtn = document.getElementById('alarmSettingsSaveBtn');
+
+alarmSettingsBtn.addEventListener('click', () => {
+  liveEnabledChk.checked = alarmSettings.liveEnabled;
+  liveThresholdSel.value = String(alarmSettings.liveThreshold);
+  rerunEnabledChk.checked = alarmSettings.rerunEnabled;
+  schedulePanel.style.display = 'none';
+  alarmSettingsPanel.style.display = alarmSettingsPanel.style.display === 'block' ? 'none' : 'block';
+});
+
+alarmSettingsSaveBtn.addEventListener('click', async () => {
+  alarmSettings.liveEnabled = liveEnabledChk.checked;
+  alarmSettings.liveThreshold = Number(liveThresholdSel.value);
+  alarmSettings.rerunEnabled = rerunEnabledChk.checked;
+  saveAlarmSettingsLocal();
+  await syncAlarmSettingsToServer();
+  showToast('알람 설정 저장됨');
+  alarmSettingsPanel.style.display = 'none';
+});
+
+// --- 오늘 편성 목록 + 방송별 개별 알람 설정 ---
+const scheduleBtn = document.getElementById('scheduleBtn');
+const schedulePanel = document.getElementById('schedulePanel');
+const scheduleList = document.getElementById('scheduleList');
+let lastItems = []; // fetchAndRender에서 매번 최신 원본 목록으로 갱신됨
+
+function fmtTime(scheStrDtm){
+  const d = new Date(scheStrDtm.replace(' ', 'T'));
+  if(isNaN(d.getTime())) return scheStrDtm;
+  return d.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
+}
+
+function buildScheduleList(){
+  const studioFromChnCd = (chncd) => {
+    if(!chncd) return null;
+    const m = /^prd_elemental_studio_(.+)_(MASTER|SLAVE)$/.exec(chncd);
+    return m ? m[1] : null;
+  };
+  const rows = [];
+  lastItems.forEach(it => {
+    if(!it.scheStrDtm) return;
+    const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
+    if(!name || !STUDIO_LIST.includes(name)) return;
+    rows.push({ studio: name, scheStrDtm: it.scheStrDtm, title: it.bdTit || '' });
+  });
+  rows.sort((a,b) => a.scheStrDtm.localeCompare(b.scheStrDtm));
+
+  if(rows.length === 0){
+    scheduleList.innerHTML = '<p style="color:var(--muted);">오늘 편성 정보를 아직 못 불러왔음 - 잠시 후 다시 열어봐.</p>';
+    return;
+  }
+
+  scheduleList.innerHTML = rows.map((r, i) => {
+    const key = `${r.studio}_${r.scheStrDtm}`;
+    const ov = alarmSettings.overrides[key];
+    const selVal = ov === undefined ? '' : ov;
+    return `
+      <div class="sched-row">
+        <div class="sched-row-head" data-idx="${i}">
+          <span><span class="sched-time">${fmtTime(r.scheStrDtm)}</span>${r.studio} ${r.title ? '· ' + r.title : ''}</span>
+          <span>▾</span>
+        </div>
+        <div class="sched-row-body" id="sched-body-${i}">
+          <select class="sched-override-sel" data-key="${key}">
+            <option value="" ${selVal===''?'selected':''}>전역설정 따름</option>
+            <option value="30" ${selVal==='30'?'selected':''}>30분 전</option>
+            <option value="15" ${selVal==='15'?'selected':''}>15분 전</option>
+            <option value="5" ${selVal==='5'?'selected':''}>5분 전</option>
+            <option value="off" ${selVal==='off'?'selected':''}>이 방송은 알람 끄기</option>
+          </select>
+        </div>
+      </div>`;
+  }).join('');
+
+  scheduleList.querySelectorAll('.sched-row-head').forEach(head => {
+    head.addEventListener('click', () => {
+      const body = document.getElementById(`sched-body-${head.dataset.idx}`);
+      body.classList.toggle('open');
+    });
+  });
+  scheduleList.querySelectorAll('.sched-override-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const key = sel.dataset.key;
+      if(sel.value === '') delete alarmSettings.overrides[key];
+      else alarmSettings.overrides[key] = sel.value;
+      saveAlarmSettingsLocal();
+      await syncAlarmSettingsToServer();
+      showToast('이 방송의 알람 설정이 저장됨');
+    });
+  });
+}
+
+scheduleBtn.addEventListener('click', () => {
+  alarmSettingsPanel.style.display = 'none';
+  const willOpen = schedulePanel.style.display !== 'block';
+  schedulePanel.style.display = willOpen ? 'block' : 'none';
+  if(willOpen) buildScheduleList();
 });
 
 // 화면을 다시 보게 되면(백그라운드→포그라운드) 화면유지를 재요청함 - 브라우저가
@@ -539,6 +724,7 @@ async function fetchAndRender(){
     if(!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
     const data = await res.json();
     const items = Array.isArray(data.result) ? data.result : [];
+    lastItems = items;
 
     const byStudio = {};
     // mappNm은 SCHEDULED(방송 예정) 상태일 때 스튜디오 코드가 아니라 담당자 이름으로
@@ -587,6 +773,24 @@ async function fetchAndRender(){
     grid.style.display = 'grid';
     emptyState.style.display = 'none';
 
+    // 방송시작전 신호체크(라이브)/재방송 시간체크용 - 스튜디오별 "가장 가까운 미래 예정"과
+    // "막 지나간 예정"을 뽑아둠 (신호끊김 감지와 별개로, 방송 시작 전/재방송 시간대 감지용)
+    const nextFuture = {}, justPassed = {};
+    {
+      const nowMs = Date.now();
+      items.forEach(it => {
+        if(!it.scheStrDtm) return;
+        const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
+        if(!name || !STUDIO_LIST.includes(name)) return;
+        const startTime = new Date(it.scheStrDtm.replace(' ', 'T')).getTime();
+        if(isNaN(startTime)) return;
+        const diff = startTime - nowMs;
+        const entry = { startTime, scheStrDtm: it.scheStrDtm };
+        if(diff >= 0){ if(!nextFuture[name] || startTime < nextFuture[name].startTime) nextFuture[name] = entry; }
+        else{ if(!justPassed[name] || startTime > justPassed[name].startTime) justPassed[name] = entry; }
+      });
+    }
+
     STUDIO_LIST.forEach(studio => {
       const info = byStudio[studio];
       const r = cardRefs[studio];
@@ -612,6 +816,37 @@ async function fetchAndRender(){
         if(nowHealthy) alerted[studio][side] = false; // 복구되면 다음 끊김 때 다시 알릴 수 있게 초기화
         prevOnair[studio][side] = nowOnair;
       });
+
+      // 방송시작전 신호체크(라이브)/재방송 시간체크: 신호끊김 감지와는 별개의 알림.
+      // 스튜디오 전체(master/slave 중 하나라도) healthy 여부만 봄.
+      const anyHealthy = !!(info && ((info.master && info.master.healthy) || (info.slave && info.slave.healthy)));
+      const isRerun = studio.startsWith('V');
+      if(isRerun){
+        if(alarmSettings.rerunEnabled){
+          const jp = justPassed[studio];
+          if(jp){
+            const diffMin = (Date.now() - jp.startTime) / 60000;
+            const rkey = `rerun_${studio}_${jp.scheStrDtm}`;
+            if(diffMin >= 0 && diffMin <= 10 && !anyHealthy && !alertedBroadcast[rkey]){
+              fireAlert('MLC 재방송 알람', `${studio} 재방송 시간인데 영상이 안 뜹니다.`, rkey);
+              alertedBroadcast[rkey] = true;
+            }
+          }
+        }
+      } else {
+        const nf = nextFuture[studio];
+        if(nf){
+          const eff = effectiveLiveSetting(studio, nf.scheStrDtm);
+          if(eff.enabled){
+            const diffMin = (nf.startTime - Date.now()) / 60000;
+            const pkey = `pre_${studio}_${nf.scheStrDtm}_${eff.threshold}`;
+            if(diffMin <= eff.threshold && diffMin >= 0 && !anyHealthy && !alertedBroadcast[pkey]){
+              fireAlert('MLC 방송예고', `${studio} 방송 ${eff.threshold}분 전인데 신호가 없습니다.`, pkey);
+              alertedBroadcast[pkey] = true;
+            }
+          }
+        }
+      }
 
       // 지금 실제로 송출 중인 쪽 판단 (마스터 우선 - 둘 다 켜져 있을 이유는 없지만 방어적으로)
       // 영상 미리보기는 "공식 방송 시작"(onair) 여부와 무관하게, 신호가 정상(healthy)
