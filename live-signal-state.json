@@ -1,30 +1,114 @@
 {
-  "M1_master": false,
-  "M1_slave": false,
-  "M2_master": false,
-  "M2_slave": false,
-  "M3_master": false,
-  "M3_slave": false,
-  "M5_master": false,
-  "M5_slave": false,
-  "M6_master": false,
-  "M6_slave": false,
-  "A_master": false,
-  "A_slave": false,
-  "B_master": false,
-  "B_slave": false,
-  "C_master": false,
-  "C_slave": false,
-  "E_master": true,
-  "E_slave": false,
-  "V1_master": true,
-  "V1_slave": false,
-  "V2_master": false,
-  "V2_slave": false,
-  "V3_master": true,
-  "V3_slave": false,
-  "ETC1_master": false,
-  "ETC1_slave": false,
-  "ETC2_master": false,
-  "ETC2_slave": false
+  "M1_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M1_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M2_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M2_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M3_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M3_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M5_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M5_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M6_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "M6_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "A_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "A_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "B_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "B_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "C_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "C_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "E_master": {
+    "onair": true,
+    "scheEndDtm": "2026-07-22T20:59:59+09:00"
+  },
+  "E_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V1_master": {
+    "onair": true,
+    "scheEndDtm": "2026-07-22T20:59:59+09:00"
+  },
+  "V1_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V2_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V2_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "V3_master": {
+    "onair": true,
+    "scheEndDtm": "2026-07-22T20:59:59+09:00"
+  },
+  "V3_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC1_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC1_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC2_master": {
+    "onair": false,
+    "scheEndDtm": null
+  },
+  "ETC2_slave": {
+    "onair": false,
+    "scheEndDtm": null
+  }
 }
