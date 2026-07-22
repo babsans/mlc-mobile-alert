@@ -5,7 +5,7 @@ on:
   workflow_dispatch:         # 수동 실행 버튼 (테스트용)
 
 permissions:
-  contents: write   # alerted-log.json을 커밋해서 다시 저장소에 저장하려면 필요
+  contents: write   # alerted-log.json / blackframe-state.json을 커밋해서 저장소에 저장하려면 필요
 
 jobs:
   check-and-notify:
@@ -16,15 +16,20 @@ jobs:
         with:
           node-version: 20
       - run: npm install web-push
-      - name: 대시보드 조회 후 조건 맞으면 Push 발송
+      - name: 대시보드 조회 후 조건 맞으면 Push 발송 (방송예고/재방송)
         env:
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: node send-alerts.js
-      - name: 발송 기록(alerted-log.json) 저장소에 커밋
+      - name: 블랙화면 감지 (ffmpeg, ubuntu-latest에 기본 설치되어 있음)
+        env:
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node black-frame-check.js
+      - name: 발송 기록 저장소에 커밋
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add alerted-log.json
+          git add alerted-log.json blackframe-state.json
           git diff --cached --quiet || git commit -m "알림 발송 기록 업데이트 [skip ci]"
           git push
