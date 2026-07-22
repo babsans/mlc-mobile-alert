@@ -12,20 +12,5 @@
       "rerunEnabled": true,
       "overrides": {}
     }
-  },
-  {
-    "endpoint": "https://fcm.googleapis.com/fcm/send/cPRnHynjWpo:APA91bG0cGpq-J0B_ZgpywS6DfY6-31Ca0EZD0OF8OC8V5Q1XV8l1tAj96IMB5DPcrdPzn1jIFH6v3dQIeFwmxghhbVW9yRF8ezFewtMdauztlCE-l-MRyH4Fk_tJWBBQbKr74hEImHZ",
-    "expirationTime": null,
-    "keys": {
-      "p256dh": "BNIvQJTlre5gYuTwrLolxwrc82o_XSjlo2G9weoffOjgLQT3SQ8R8MxVBNEbLs-UTbKqzwZ_JVCVYTYQoZV_38k",
-      "auth": "40GXGFeRN_pP4smE6e0UyQ"
-    },
-    "settings": {
-      "liveEnabled": true,
-      "liveThreshold": 30,
-      "rerunEnabled": true,
-      "signalLossEnabled": true,
-      "overrides": {}
-    }
   }
 ]
