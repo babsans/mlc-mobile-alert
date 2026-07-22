@@ -12,6 +12,12 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// 설치 가능(installable) 판정 조건 중 하나가 fetch 핸들러 존재 여부라서 추가함.
+// 오프라인 캐싱은 안 하고, 그냥 평소처럼 네트워크로 그대로 흘려보냄.
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
+});
+
 // 서버(GitHub Actions)가 Web Push로 보낸 payload를 받아 알림으로 표시
 self.addEventListener('push', (event) => {
   let data = { title: 'MLC 방송예고', body: '' };
