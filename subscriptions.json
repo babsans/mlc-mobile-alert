@@ -28,5 +28,21 @@
       "blackFrameEnabled": true,
       "overrides": {}
     }
+  },
+  {
+    "endpoint": "https://fcm.googleapis.com/fcm/send/cNM3y0qwy0w:APA91bHLMqrH2u2IZ2VH5VB5EEE2mScpDQ23CG4SbcdTlPHK1YGp0Vc8JGqXb5sG12vrh5045SLJa6ctu9sbjNTqPtjbrDNdGqtMRK0FbBEs2zxmTJz4Bilde_O6a-Tmv10OHLe634eE",
+    "expirationTime": null,
+    "keys": {
+      "p256dh": "BDw-RV2XYMn_ZH_bwt06naAr-786TCXVc7LpOTQnqD1yffSucgplruuGmVJ3VKxhe79UJkNALJkVMIIP1BSu_Jg",
+      "auth": "KZ1f4ymRt5iMRbJrxlu-QA"
+    },
+    "settings": {
+      "liveEnabled": true,
+      "liveThreshold": 30,
+      "rerunEnabled": true,
+      "signalLossEnabled": true,
+      "blackFrameEnabled": true,
+      "overrides": {}
+    }
   }
 ]
