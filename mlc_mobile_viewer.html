@@ -253,7 +253,10 @@ let wakeEnabled = localStorage.getItem('mlc_wake_enabled') === '1';
 const prevOnair = {};   // studio -> {master: bool, slave: bool} - 직전 onair 상태
 const alerted = {};     // studio -> {master: bool, slave: bool} - 이미 알림 보냈는지(복구 전까지 중복 방지)
 const alertedBroadcast = {}; // "pre_스튜디오_시간_문턱" / "rerun_스튜디오_시간" -> true (방송예고/재방송 알림 중복방지)
-STUDIO_LIST.forEach(s => { prevOnair[s] = {master:false, slave:false}; alerted[s] = {master:false, slave:false}; });
+const prevScheEnd = {}; // studio -> {master: scheEndDtm|null, slave: scheEndDtm|null} - 방송 중일 때의
+                         // 종료예정시각을 기억해둠(같은 스튜디오의 다음 프로그램 정보가 섞여 들어와도
+                         // 헷갈리지 않도록, "지금 꺼진 그 방송"의 종료시각만 정확히 씀)
+STUDIO_LIST.forEach(s => { prevOnair[s] = {master:false, slave:false}; alerted[s] = {master:false, slave:false}; prevScheEnd[s] = {master:null, slave:null}; });
 
 // --- 블랙화면 감지: 미리보기 영상이 계속 새까맣게 나오면 감지(연결은 정상이라 신호끊김으론 안 잡힘) ---
 const blackCanvas = document.createElement('canvas');
@@ -946,13 +949,18 @@ async function fetchAndRender(){
       // 신호끊김 감지: 직전에 onair(정상 송출 중)였던 쪽이 이번엔 healthy=false가 되면
       // 딱 한 번만 알림 (복구되기 전까지 재알림 안 함, 5초마다 스팸 방지).
       // 단, 편성 종료시각(scheEndDtm)이 지난 뒤에 신호가 꺼지는 건 정상적인 방송 종료이므로
-      // 알람 대상에서 제외함 (사고로 끊긴 것과 구분).
-      const scheEndTime = info && info.scheEndDtm ? new Date(info.scheEndDtm.replace(' ', 'T')).getTime() : null;
-      const pastScheduledEnd = scheEndTime !== null && Date.now() > scheEndTime;
+      // 알람 대상에서 제외함 (사고로 끊긴 것과 구분). 종료시각은 "지금 이 순간의 병합 결과"가
+      // 아니라 "방송 중이었을 때 기억해둔 값"을 써야 함 - 같은 스튜디오의 다음 프로그램 정보가
+      // 섞여 들어오면 종료시각이 엉뚱하게(한참 뒤로) 바뀔 수 있어서.
       ['master','slave'].forEach(side => {
         const cur = info && info[side];
         const nowOnair = !!(cur && cur.onair);
         const nowHealthy = !!(cur && cur.healthy);
+        if(nowOnair && info && info.scheEndDtm){
+          prevScheEnd[studio][side] = info.scheEndDtm;
+        }
+        const scheEndTime = prevScheEnd[studio][side] ? new Date(prevScheEnd[studio][side].replace(' ', 'T')).getTime() : null;
+        const pastScheduledEnd = scheEndTime !== null && Date.now() > scheEndTime;
         if(prevOnair[studio][side] && !nowHealthy && !alerted[studio][side] && !pastScheduledEnd){
           fireSignalAlert(studio, side === 'master' ? 'MASTER' : 'SLAVE');
           alerted[studio][side] = true;
