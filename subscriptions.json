@@ -1,18 +1,1 @@
-[
-  {
-    "endpoint": "https://fcm.googleapis.com/fcm/send/d_2Na_Lc3uo:APA91bENTR5pR4TZv3YuWAWSy9dC0-PNcLuCgbsnsItlaKMPdAcU4rW3Q6LjoUJnUmZnY9aguA4ArlNSStBAbQ4tHtU3FCyS2hUQVnaN_yJgbkJ6goaSbMKlyPOq6pZ9JflIm_IuaXGj",
-    "expirationTime": null,
-    "keys": {
-      "p256dh": "BN7E9WaVj-HPJKc0KYzcg1cke1YThgXKIYYjFfyAMwB2NbsBVOZ-1Rh52IPYhu_hj28gGq6OJ9ArWMLdRCjnIz4",
-      "auth": "cWFJGkjG3tcm6_aLEBMsHA"
-    },
-    "settings": {
-      "liveEnabled": true,
-      "liveThreshold": 30,
-      "rerunEnabled": true,
-      "signalLossEnabled": true,
-      "blackFrameEnabled": true,
-      "overrides": {}
-    }
-  }
-]
+[]
