@@ -273,6 +273,7 @@ let cardBuilt = false;
 const cardRefs = {};      // studio -> {root, name, badge, master, slave, preview, srcBadge, video, muteBtn, volSlider}
 const activeSide = {};    // studio -> 'master' | 'slave' | null - 마지막으로 튼 소스, 안 바뀌면 영상 그대로 둠
 const videoStalled = {};  // studio -> 지금 네트워크 버퍼링/정체 중인지 (true면 블랙화면 판정 건너뜀)
+const lastVideoTime = {}; // studio -> 직전 체크 시점의 video.currentTime (재생이 실제로 진행 중인지 확인용)
 const hlsMap = {};        // studio -> Hls 인스턴스 (Android/Chrome용)
 const videoPrefs = {};    // studio -> {muted, volume} - 사용자가 조절한 값은 다음 갱신에도 유지
 
@@ -1215,17 +1216,29 @@ async function fetchAndRender(){
       // 블랙화면 감지: 온에어(공식 방송 중)인 스튜디오의 재생 중인 영상만 확인
       // (지금 이 기기 네트워크가 버퍼링 중이면 판정 자체를 건너뜀 - 오탐 방지)
       if(alarmSettings.blackFrameEnabled && isOnair && activeSide[studio] && !videoStalled[studio]){
-        const brightness = sampleBrightness(r.video);
-        if(brightness !== null){
-          if(brightness < BLACK_THRESHOLD){
-            blackFrameCount[studio] = (blackFrameCount[studio] || 0) + 1;
-            if(blackFrameCount[studio] >= BLACK_CONFIRM_TICKS && !blackFrameAlerted[studio]){
-              fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`, `mlc-black-${studio}`);
-              blackFrameAlerted[studio] = true;
+        // waiting/stalled 이벤트가 안 뜨는 종류의 재생 멈춤(디코딩 glitch 등)도 잡아내기 위해,
+        // 재생 위치(currentTime)가 직전 체크 때와 비교해 실제로 앞으로 가고 있는지도 같이 확인.
+        // 안 움직이고 있으면 "지금 프레임이 진짜 까만지"를 신뢰할 수 없으므로 판정에서 제외.
+        const curTime = r.video.currentTime;
+        const prevTime = lastVideoTime[studio];
+        const isAdvancing = prevTime === undefined || curTime > prevTime;
+        lastVideoTime[studio] = curTime;
+
+        if(!isAdvancing){
+          blackFrameCount[studio] = 0; // 멈춰있는 동안은 카운트도 쌓이지 않게
+        } else {
+          const brightness = sampleBrightness(r.video);
+          if(brightness !== null){
+            if(brightness < BLACK_THRESHOLD){
+              blackFrameCount[studio] = (blackFrameCount[studio] || 0) + 1;
+              if(blackFrameCount[studio] >= BLACK_CONFIRM_TICKS && !blackFrameAlerted[studio]){
+                fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`, `mlc-black-${studio}`);
+                blackFrameAlerted[studio] = true;
+              }
+            }else{
+              blackFrameCount[studio] = 0;
+              blackFrameAlerted[studio] = false; // 복구되면 다음에 또 까매질 때 다시 알릴 수 있게 초기화
             }
-          }else{
-            blackFrameCount[studio] = 0;
-            blackFrameAlerted[studio] = false; // 복구되면 다음에 또 까매질 때 다시 알릴 수 있게 초기화
           }
         }
       }
