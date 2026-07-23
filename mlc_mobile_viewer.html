@@ -106,9 +106,11 @@
     font-size:10px; font-weight:700; color:var(--red); background:rgba(232,67,58,.12);
     border:1px solid rgba(232,67,58,.4); border-radius:6px; padding:3px 7px; flex-shrink:0;
   }
+  .sched-time-line{font-size:10px; color:var(--muted);}
 
   .card-body{display:flex; align-items:flex-start; justify-content:flex-end; gap:10px;}
-  .rows{flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:7px;}
+  .rows-col{flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:6px;}
+  .rows{display:flex; flex-direction:column; gap:7px;}
   .row{
     display:flex; align-items:center; justify-content:space-between;
     background:var(--panel-2); border-radius:9px; padding:8px 11px;
@@ -895,9 +897,12 @@ function buildCards(){
         <span class="onair-badge" id="badge-${studio}" style="display:none;">방송중</span>
       </div>
       <div class="card-body">
-        <div class="rows">
-          <div id="master-${studio}"></div>
-          <div id="slave-${studio}"></div>
+        <div class="rows-col">
+          <div class="rows">
+            <div id="master-${studio}"></div>
+            <div id="slave-${studio}"></div>
+          </div>
+          <div class="sched-time-line" id="schedtime-${studio}" style="display:none;"></div>
         </div>
         <div class="live-preview" id="preview-${studio}" style="display:none;">
           <span class="live-src-badge" id="srcbadge-${studio}"></span>
@@ -920,6 +925,7 @@ function buildCards(){
       rows: document.querySelector(`#card-${studio} .rows`),
       master: document.getElementById(`master-${studio}`),
       slave: document.getElementById(`slave-${studio}`),
+      schedTime: document.getElementById(`schedtime-${studio}`),
       preview: document.getElementById(`preview-${studio}`),
       srcBadge: document.getElementById(`srcbadge-${studio}`),
       video: document.getElementById(`video-${studio}`),
@@ -1053,6 +1059,7 @@ async function fetchAndRender(){
         title: it.bdTit || '',
         mainUrl: it.mainRecvUrl || null,
         subUrl: it.subRecvUrl || null,
+        scheStrDtm: it.scheStrDtm || null,
         scheEndDtm: it.scheEndDtm || null,
       };
       // 같은 스튜디오(mappNm)로 항목이 두 개 이상 올 수 있음 (예: 현재 방송 + 다음
@@ -1103,6 +1110,12 @@ async function fetchAndRender(){
       r.root.classList.toggle('onair', !!isOnair);
       if(info && info.title){ r.name.style.display = 'block'; r.name.textContent = info.title; }
       else { r.name.style.display = 'none'; }
+      if(info && info.scheStrDtm){
+        r.schedTime.style.display = 'block';
+        r.schedTime.textContent = `편성 ${fmtTime(info.scheStrDtm)}${info.scheEndDtm ? ' ~ ' + fmtTime(info.scheEndDtm) : ''}`;
+      } else {
+        r.schedTime.style.display = 'none';
+      }
       r.badge.style.display = isOnair ? 'inline-block' : 'none';
       r.master.innerHTML = fmtStudioRow('MASTER', info ? info.master : null);
       r.slave.innerHTML = fmtStudioRow('SLAVE', info ? info.slave : null);
@@ -1183,7 +1196,7 @@ async function fetchAndRender(){
           if(brightness < BLACK_THRESHOLD){
             blackFrameCount[studio] = (blackFrameCount[studio] || 0) + 1;
             if(blackFrameCount[studio] >= BLACK_CONFIRM_TICKS && !blackFrameAlerted[studio]){
-              fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상인데 화면이 까맣게 나오고 있습니다.`, `mlc-black-${studio}`);
+              fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`, `mlc-black-${studio}`);
               blackFrameAlerted[studio] = true;
             }
           }else{
