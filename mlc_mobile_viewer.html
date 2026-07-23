@@ -272,6 +272,7 @@ let consecutiveFailures = 0;
 let cardBuilt = false;
 const cardRefs = {};      // studio -> {root, name, badge, master, slave, preview, srcBadge, video, muteBtn, volSlider}
 const activeSide = {};    // studio -> 'master' | 'slave' | null - 마지막으로 튼 소스, 안 바뀌면 영상 그대로 둠
+const videoStalled = {};  // studio -> 지금 네트워크 버퍼링/정체 중인지 (true면 블랙화면 판정 건너뜀)
 const hlsMap = {};        // studio -> Hls 인스턴스 (Android/Chrome용)
 const videoPrefs = {};    // studio -> {muted, volume} - 사용자가 조절한 값은 다음 갱신에도 유지
 
@@ -956,6 +957,14 @@ function buildCards(){
     r.video.addEventListener('dblclick', () => { r.preview.classList.add('expanded'); });
     r.expandCloseBtn.addEventListener('click', () => { r.preview.classList.remove('expanded'); });
 
+    // 네트워크가 느려서 영상이 순간적으로 버퍼링(정체)될 때, 그 동안은 블랙화면 판정에서
+    // 제외함(내 네트워크 문제를 실제 방송 사고로 오인하지 않도록). waiting/stalled = 정체 시작,
+    // playing = 정상 재생 재개.
+    videoStalled[studio] = false;
+    r.video.addEventListener('waiting', () => { videoStalled[studio] = true; });
+    r.video.addEventListener('stalled', () => { videoStalled[studio] = true; });
+    r.video.addEventListener('playing', () => { videoStalled[studio] = false; });
+
   });
   cardBuilt = true;
 }
@@ -1190,7 +1199,8 @@ async function fetchAndRender(){
       }
 
       // 블랙화면 감지: 온에어(공식 방송 중)인 스튜디오의 재생 중인 영상만 확인
-      if(alarmSettings.blackFrameEnabled && isOnair && activeSide[studio]){
+      // (지금 이 기기 네트워크가 버퍼링 중이면 판정 자체를 건너뜀 - 오탐 방지)
+      if(alarmSettings.blackFrameEnabled && isOnair && activeSide[studio] && !videoStalled[studio]){
         const brightness = sampleBrightness(r.video);
         if(brightness !== null){
           if(brightness < BLACK_THRESHOLD){
