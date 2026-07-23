@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MLC 디버그 도구</title>
+<style>
+  :root{
+    --bg:#0a0c10; --panel:#12151b; --panel-2:#171b22; --line:#232833;
+    --green:#35c98c; --red:#e8433a; --amber:#e0a83a; --muted:#6b7280; --text:#e7e9ee;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:'SF Mono','IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;}
+  header{padding:16px 16px 8px;}
+  h1{margin:0; font-size:15px;}
+  p.desc{color:var(--muted); font-size:11px; line-height:1.6; margin:6px 0 0;}
+  section{margin:14px 16px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 14px;}
+  h2{font-size:12px; margin:0 0 8px; color:var(--text);}
+  table{width:100%; border-collapse:collapse; font-size:10.5px;}
+  th,td{padding:5px 6px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap;}
+  th{color:var(--muted); font-weight:600;}
+  tr.v-studio td{background:rgba(224,168,58,.06);}
+  .ok{color:var(--green);}
+  .bad{color:var(--red); font-weight:700;}
+  .warn{color:var(--amber); font-weight:700;}
+  .muted{color:var(--muted);}
+  .row-flex{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px;}
+  button, input[type=text]{
+    font-family:inherit; font-size:11px; padding:6px 10px; border-radius:8px;
+    border:1px solid var(--line); background:var(--panel-2); color:var(--text);
+  }
+  button{cursor:pointer;}
+  button.primary{color:var(--green); border-color:rgba(53,201,140,.5);}
+  #diagStatus{font-size:11px; color:var(--muted);}
+  #histTable td.body{white-space:normal; max-width:340px;}
+  .table-scroll{overflow-x:auto;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MLC 디버그 도구</h1>
+  <p class="desc">
+    재방송(V) 신호끊김 오탐 원인 확인용 실시간 진단 + 이 기기의 알람 기록 검색.<br>
+    ⚠️ 알람 기록은 <code>mlc_mobile_viewer.html</code>과 같은 도메인(GitHub Pages)에 올려야 같은 기록을 볼 수 있습니다.
+  </p>
+</header>
+
+<section>
+  <h2>🔎 실시간 진단 - 편성종료 억제 로직이 왜 안 먹히는지 확인</h2>
+  <p class="desc">
+    빨간색(<span class="bad">종료시각 없음</span>)으로 표시된 스튜디오는, 방송 중(ON AIR)인데도 API가
+    편성종료시각(scheEndDtm)을 안 주거나, ON AIR 자체가 한 번도 안 잡혀서 알람 억제 로직이 작동할 재료가 없는
+    상태입니다. 특히 V1/V2/V3(재방송)가 방송이 끝난 뒤에도 계속 이 상태라면, 신호끊김 알람이 계속 울리는
+    원인이 이것일 가능성이 큽니다. 5초마다 자동 갱신됩니다.<br>
+    ⚠️ 화면유지를 켜도 <b>이 브라우저 탭을 다른 앱으로 전환하면</b> 타이머가 멈출 수 있습니다 - 화면은 켜둔 채로, 이 화면을 계속 보고 계셔야 합니다.
+  </p>
+  <div class="row-flex">
+    <button class="primary" id="diagStartBtn">▶ 진단 시작</button>
+    <button id="wakeLockBtn">📱 화면유지 꺼짐</button>
+    <span id="diagStatus">대기 중</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>스튜디오</th><th>쪽</th><th>isRecording</th><th>isHealthy</th><th>ON AIR</th>
+          <th>편성시작(scheStrDtm)</th><th>편성종료(scheEndDtm, 원본)</th><th>기억된 종료시각</th><th>지금 판정</th>
+        </tr>
+      </thead>
+      <tbody id="diagBody"><tr><td colspan="9" class="muted">진단 시작 버튼을 눌러주세요.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>🧾 이벤트 로그 (자동 기록 - 화면 안 보고 있어도 계속 쌓임)</h2>
+  <p class="desc">
+    "방송중 → 신호끊김" 전환 순간, "재방송/방송예고 알람 조건 성립" 순간을 놓치지 않고 자동으로 기록합니다.
+    ⚠ 표시가 있으면 버그로 의심되는 순간입니다. 이 화면을 계속 열어두기만 하면(화면 켜진 채로) 나중에
+    몰아서 확인하셔도 됩니다.
+  </p>
+  <div class="row-flex">
+    <button id="logDownloadBtn">⬇ 로그 다운로드</button>
+    <button id="logClearBtn">로그 지우기</button>
+    <span class="muted" id="logCount">기록 0건</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>시각</th><th>종류</th><th>스튜디오</th><th>쪽</th><th>상세</th><th>판정</th></tr></thead>
+      <tbody id="eventLogBody"><tr><td colspan="6" class="muted">아직 기록된 이벤트가 없습니다.</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>📜 알람 기록 검색 (이 기기 전용)</h2>
+  <p class="desc">mlc_mobile_viewer.html이 이 기기에 남긴 알람 기록을 검색/정리해서 봅니다.</p>
+  <div class="row-flex">
+    <input type="text" id="histSearch" placeholder="스튜디오명, 알람종류 등으로 검색 (예: V2, 신호끊김)" style="flex:1; min-width:200px;">
+    <button id="histRefreshBtn">새로고침</button>
+    <button id="histClearBtn">전체 삭제</button>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>시각</th><th>제목</th><th>내용</th></tr></thead>
+      <tbody id="histBody"><tr><td colspan="3" class="muted">불러오는 중...</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>🗄 서버 중앙 기록 (모든 기기 공통, 최근 7일)</h2>
+  <p class="desc">
+    서버(GitHub Actions)가 실제로 알람을 발송한 시점에 남긴 기록입니다. 기기별 로컬 기록과 달리
+    갤럭시 배터리 절전 등으로 기기에 저장이 실패해도 이쪽엔 남아있습니다.<br>
+    ⚠️ 이 저장소(GitHub Pages) 주소로 배포된 상태에서만 정상적으로 불러와집니다 - 로컬 파일로 직접 열면 안 됩니다.
+  </p>
+  <div class="row-flex">
+    <input type="text" id="srvHistSearch" placeholder="스튜디오명, 알람종류 등으로 검색" style="flex:1; min-width:200px;">
+    <button id="srvHistRefreshBtn">새로고침</button>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>시각</th><th>종류</th><th>스튜디오</th><th>내용</th></tr></thead>
+      <tbody id="srvHistBody"><tr><td colspan="4" class="muted">불러오는 중...</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+const API_URL = "https://mlc-api.cjoshopping.com/external/public/api/streamhistory/dashboard/v2/live";
+const STUDIO_LIST = ["M1","M2","M3","M5","M6","A","B","C","E","V1","V2","V3","ETC1","ETC2"];
+const V_STUDIOS = STUDIO_LIST.filter(s => s.startsWith('V'));
+
+function studioFromChnCd(chncd){
+  if(!chncd) return null;
+  const m = /^prd_elemental_studio_(.+)_(MASTER|SLAVE)$/.exec(chncd);
+  return m ? m[1] : null;
+}
+
+// mlc_mobile_viewer.html과 동일한 "방송 중이었을 때의 종료시각을 기억해두는" 로직을
+// 그대로 재현해서, 실제로 그 값이 채워지는지/안 채워지는지를 화면에 그대로 보여줌.
+const prevScheEnd = {};
+const prevOnair = {};       // studio -> {master, slave} - 직전 틱의 onair 상태(전환 감지용)
+STUDIO_LIST.forEach(s => { prevScheEnd[s] = { master: null, slave: null }; prevOnair[s] = { master: false, slave: false }; });
+
+// --- 이벤트 로그: 화면을 안 보고 있어도 "의심스러운 순간"이 생기면 자동으로 기록해둠 ---
+// 지금까지는 그 순간에 화면을 보고 있어야만 확인 가능했는데, 이러면 나중에 몰아서 봐도 됨.
+const eventLog = []; // {time, kind, studio, side, detail, verdict}
+const MAX_LOG = 300;
+const loggedActiveKeys = new Set(); // 조건이 계속 참인 동안 매 5초 중복 기록 안 하려고 씀
+
+function logEvent(kind, studio, side, detail, verdict){
+  eventLog.unshift({ time: Date.now(), kind, studio, side, detail, verdict });
+  if(eventLog.length > MAX_LOG) eventLog.length = MAX_LOG;
+  renderEventLog();
+}
+
+const RERUN_GRACE_MIN = 10;   // send-alerts.js와 동일
+const LIVE_THRESHOLD = 30;    // 기본값(개인별 설정은 이 도구에서 알 수 없어 기본값만 시뮬레이션)
+const CATCH_WINDOW = 10;
+
+function computeScheduleEdges(items){
+  const now = Date.now();
+  const nextFuture = {}, justPassed = {};
+  items.forEach(it => {
+    if(!it.scheStrDtm) return;
+    const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
+    if(!name || !STUDIO_LIST.includes(name)) return;
+    const startTime = new Date(it.scheStrDtm.replace(' ', 'T')).getTime();
+    if(isNaN(startTime)) return;
+    const diff = startTime - now;
+    const entry = { startTime, scheStrDtm: it.scheStrDtm, title: it.bdTit || '' };
+    if(diff >= 0){ if(!nextFuture[name] || startTime < nextFuture[name].startTime) nextFuture[name] = entry; }
+    else{ if(!justPassed[name] || startTime > justPassed[name].startTime) justPassed[name] = entry; }
+  });
+  return { nextFuture, justPassed };
+}
+
+const diagBody = document.getElementById('diagBody');
+const diagStatus = document.getElementById('diagStatus');
+let diagTimer = null;
+
+async function runDiagOnce(){
+  try{
+    const res = await fetch(API_URL, { headers: { Accept: 'application/json' } });
+    if(!res.ok){ diagStatus.textContent = `API 오류 (${res.status})`; return; }
+    const data = await res.json();
+    const items = Array.isArray(data.result) ? data.result : [];
+    const now = Date.now();
+
+    const byStudio = {};
+    items.forEach(it => {
+      const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
+      if(!name || !STUDIO_LIST.includes(name)) return;
+      const liveByType = {};
+      (it.liveStateList || []).forEach(ls => { liveByType[ls.streamType] = ls; });
+      const main = liveByType['MAIN'];
+      const sub = liveByType['SUB'];
+      const info = {
+        master: main ? { onair: !!main.isRecording && !!main.isHealthy, rec: !!main.isRecording, healthy: !!main.isHealthy } : null,
+        slave: sub ? { onair: !!sub.isRecording && !!sub.isHealthy, rec: !!sub.isRecording, healthy: !!sub.isHealthy } : null,
+        scheStrDtm: it.scheStrDtm || null,
+        scheEndDtm: it.scheEndDtm || null,
+      };
+      const rank = (s) => {
+        if(!s) return 0;
+        const onair = (s.master && s.master.onair) || (s.slave && s.slave.onair);
+        if(onair) return 2;
+        const healthy = (s.master && s.master.healthy) || (s.slave && s.slave.healthy);
+        return healthy ? 1 : 0;
+      };
+      if(!byStudio[name] || rank(info) > rank(byStudio[name])) byStudio[name] = info;
+    });
+
+    const rows = [];
+    const { nextFuture, justPassed } = computeScheduleEdges(items);
+    const PREP_WINDOW_MIN = 15; // 다음 편성 시작 이 시간 이내면 "장비 준비 중일 가능성"으로 별도 표시
+    STUDIO_LIST.forEach(studio => {
+      const info = byStudio[studio];
+      ['master','slave'].forEach(side => {
+        const cur = info && info[side];
+        if(!cur) return; // 이 쪽(master/slave) 데이터 자체가 없으면 표시 안 함
+        const nowOnair = !!cur.onair;
+        if(nowOnair && info.scheEndDtm) prevScheEnd[studio][side] = info.scheEndDtm;
+        const remembered = prevScheEnd[studio][side];
+        const scheEndTime = remembered ? new Date(remembered.replace(' ', 'T')).getTime() : null;
+        const pastEnd = scheEndTime !== null && now > scheEndTime;
+        rows.push({
+          studio, side,
+          rec: cur.rec, healthy: cur.healthy, onair: nowOnair,
+          scheStrDtm: info.scheStrDtm, scheEndDtmRaw: info.scheEndDtm,
+          remembered, pastEnd,
+        });
+
+        // --- 자동 기록 1: 신호끊김 - "방송중 -> 신호끊김" 전환이 일어나는 그 순간을 놓치지 않고 기록 ---
+        const wasOnair = prevOnair[studio][side];
+        if(wasOnair && !nowOnair && !cur.healthy){
+          const nf = nextFuture[studio];
+          const minsToNext = nf ? (nf.startTime - now) / 60000 : null;
+          const nearNextStart = minsToNext !== null && minsToNext <= PREP_WINDOW_MIN;
+          let verdict;
+          if(pastEnd) verdict = '억제됨(정상종료 처리)';
+          else if(!remembered) verdict = '⚠ 알람 발동(종료시각 없어서 억제 불가 - 버그 의심)';
+          else if(nearNextStart) verdict = `⚠ 알람 발동(다음편성 ${minsToNext.toFixed(1)}분 전 - 장비준비/전환 중일 가능성)`;
+          else verdict = '알람 발동(정상)';
+          const nextInfoStr = nf ? `, 다음편성 ${nf.scheStrDtm}(${minsToNext.toFixed(1)}분 후)` : ', 다음편성 없음';
+          logEvent('신호끊김', studio, side === 'master' ? 'MASTER' : 'SLAVE',
+            `편성종료(기억값): ${remembered || '없음'}${nextInfoStr}`, verdict);
+        }
+        prevOnair[studio][side] = nowOnair;
+      });
+    });
+
+    // --- 자동 기록 2: 재방송(V) - "편성시간 지났는데 신호 없음" 조건이 처음 성립하는 순간 기록 ---
+    V_STUDIOS.forEach(studio => {
+      const info = justPassed[studio];
+      if(!info) return;
+      const diffMin = (now - info.startTime) / 60000;
+      if(diffMin < 0 || diffMin > RERUN_GRACE_MIN) return;
+      const healthy = !!(byStudio[studio] && ((byStudio[studio].master && byStudio[studio].master.healthy) || (byStudio[studio].slave && byStudio[studio].slave.healthy)));
+      const key = `rerun_${studio}_${info.scheStrDtm}`;
+      if(healthy){ loggedActiveKeys.delete(key); return; }
+      if(loggedActiveKeys.has(key)) return; // 이미 기록한 조건이 계속 참인 것뿐 - 중복 기록 안 함
+      loggedActiveKeys.add(key);
+      logEvent('재방송 알람조건', studio, '-', `편성시작 ${info.scheStrDtm} (${diffMin.toFixed(1)}분 경과), 신호 없음`, '알람 발동 조건 성립');
+    });
+
+    // --- 자동 기록 3: 방송시작전(라이브) - 기본 문턱(30분) 기준 조건 성립 시점 기록 ---
+    STUDIO_LIST.filter(s => !s.startsWith('V')).forEach(studio => {
+      const info = nextFuture[studio];
+      if(!info) return;
+      const diffMin = (info.startTime - now) / 60000;
+      if(diffMin > LIVE_THRESHOLD || diffMin < LIVE_THRESHOLD - CATCH_WINDOW) return;
+      const healthy = !!(byStudio[studio] && ((byStudio[studio].master && byStudio[studio].master.healthy) || (byStudio[studio].slave && byStudio[studio].slave.healthy)));
+      const key = `pre_${studio}_${info.scheStrDtm}`;
+      if(healthy){ loggedActiveKeys.delete(key); return; }
+      if(loggedActiveKeys.has(key)) return;
+      loggedActiveKeys.add(key);
+      logEvent('방송예고 알람조건', studio, '-', `편성시작 ${info.scheStrDtm}까지 ${diffMin.toFixed(1)}분, 신호 없음`, '알람 발동 조건 성립(기본 30분 기준)');
+    });
+
+    if(rows.length === 0){
+      diagBody.innerHTML = '<tr><td colspan="9" class="muted">지금 신호가 잡히는 스튜디오가 없습니다.</td></tr>';
+    } else {
+      diagBody.innerHTML = rows.map(r => {
+        const isV = r.studio.startsWith('V');
+        const judgement = r.onair
+          ? (r.remembered ? `<span class="ok">억제 가능(종료시각 있음)</span>` : `<span class="bad">종료시각 없음 → 억제 안 됨</span>`)
+          : (r.pastEnd ? `<span class="ok">편성종료 지남(정상)</span>` : `<span class="muted">방송 없음</span>`);
+        return `<tr class="${isV ? 'v-studio' : ''}">
+          <td>${r.studio}</td>
+          <td>${r.side === 'master' ? 'MASTER' : 'SLAVE'}</td>
+          <td>${r.rec ? '<span class="ok">true</span>' : '<span class="muted">false</span>'}</td>
+          <td>${r.healthy ? '<span class="ok">true</span>' : '<span class="bad">false</span>'}</td>
+          <td>${r.onair ? '<span class="ok">ON AIR</span>' : '<span class="muted">-</span>'}</td>
+          <td>${r.scheStrDtm || '<span class="muted">없음</span>'}</td>
+          <td>${r.scheEndDtmRaw ? r.scheEndDtmRaw : '<span class="warn">없음(!)</span>'}</td>
+          <td>${r.remembered || '<span class="muted">아직 없음</span>'}</td>
+          <td>${judgement}</td>
+        </tr>`;
+      }).join('');
+    }
+    diagStatus.textContent = `마지막 갱신: ${new Date().toLocaleTimeString('ko-KR')}`;
+  }catch(e){
+    diagStatus.textContent = `조회 실패: ${e.message}`;
+  }
+}
+
+const eventLogBody = document.getElementById('eventLogBody');
+const logCount = document.getElementById('logCount');
+
+function renderEventLog(){
+  logCount.textContent = `기록 ${eventLog.length}건`;
+  if(eventLog.length === 0){
+    eventLogBody.innerHTML = '<tr><td colspan="6" class="muted">아직 기록된 이벤트가 없습니다.</td></tr>';
+    return;
+  }
+  eventLogBody.innerHTML = eventLog.map(e => {
+    const isBug = e.verdict.includes('⚠');
+    return `<tr>
+      <td>${new Date(e.time).toLocaleString('ko-KR')}</td>
+      <td>${e.kind}</td>
+      <td>${e.studio}</td>
+      <td>${e.side}</td>
+      <td>${e.detail}</td>
+      <td class="${isBug ? 'bad' : 'ok'}">${e.verdict}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('logDownloadBtn').addEventListener('click', () => {
+  if(eventLog.length === 0){ diagStatus.textContent = '다운로드할 로그가 없습니다.'; return; }
+  const text = eventLog.slice().reverse().map(e =>
+    `${new Date(e.time).toLocaleString('ko-KR')}\t${e.kind}\t${e.studio}\t${e.side}\t${e.detail}\t${e.verdict}`
+  ).join('\n');
+  const blob = new Blob([`시각\t종류\t스튜디오\t쪽\t상세\t판정\n${text}`], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mlc_event_log_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('logClearBtn').addEventListener('click', () => {
+  if(!confirm('이벤트 로그를 전부 지울까요?')) return;
+  eventLog.length = 0;
+  loggedActiveKeys.clear();
+  renderEventLog();
+});
+
+
+document.getElementById('diagStartBtn').addEventListener('click', (ev) => {
+  if(diagTimer){
+    clearInterval(diagTimer);
+    diagTimer = null;
+    ev.target.textContent = '▶ 진단 시작';
+    diagStatus.textContent = '중지됨';
+    return;
+  }
+  ev.target.textContent = '■ 진단 중지';
+  runDiagOnce();
+  diagTimer = setInterval(runDiagOnce, 5000);
+  acquireWakeLock(); // 진단 시작하면 화면꺼짐 방지도 같이 켜줌(잊고 안 켜는 실수 방지)
+});
+
+// --- 화면유지(Wake Lock) - 폰 화면이 자동으로 꺼져서 진단이 멈추는 걸 방지 ---
+let wakeLock = null;
+let wakeEnabled = false;
+const wakeLockBtn = document.getElementById('wakeLockBtn');
+
+function updateWakeBtnUI(){
+  wakeLockBtn.textContent = wakeEnabled && wakeLock ? '📱 화면유지 켜짐' : '📱 화면유지 꺼짐';
+  wakeLockBtn.style.color = wakeEnabled && wakeLock ? 'var(--green)' : '';
+}
+
+async function acquireWakeLock(){
+  if(!('wakeLock' in navigator)){
+    diagStatus.textContent = '이 브라우저는 화면유지(Wake Lock) API를 지원하지 않습니다.';
+    return;
+  }
+  try{
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeEnabled = true;
+    wakeLock.addEventListener('release', () => { updateWakeBtnUI(); });
+  }catch(e){
+    wakeLock = null;
+    // file://로 직접 연 경우 등, https가 아닌 환경(보안 컨텍스트 아님)이면 여기로 옴
+    diagStatus.textContent = `화면유지 실패: ${e.message || e.name} (file://로 열었다면 이 기능은 https 배포 후에만 동작합니다)`;
+  }
+  updateWakeBtnUI();
+}
+
+wakeLockBtn.addEventListener('click', async () => {
+  if(!wakeEnabled){
+    await acquireWakeLock();
+  } else {
+    wakeEnabled = false;
+    if(wakeLock){ wakeLock.release(); wakeLock = null; }
+    updateWakeBtnUI();
+  }
+});
+
+// 화면을 껐다 켜거나 다른 앱 갔다오면 Wake Lock이 자동 해제되므로, 다시 보이면 재요청
+document.addEventListener('visibilitychange', () => {
+  if(wakeEnabled && document.visibilityState === 'visible' && !wakeLock){
+    acquireWakeLock();
+  }
+});
+
+// --- 알람 기록 검색 (mlc_mobile_viewer.html / sw.js와 같은 IndexedDB를 읽음) ---
+const HISTORY_DB_NAME = 'mlc-history';
+const HISTORY_STORE_NAME = 'alarms';
+
+function openHistoryDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HISTORY_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(HISTORY_STORE_NAME)){
+        db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getAllHistory(){
+  try{
+    const db = await openHistoryDB();
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readonly');
+    const req = tx.objectStore(HISTORY_STORE_NAME).getAll();
+    const rows = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return rows.sort((a, b) => b.time - a.time);
+  }catch(e){ return []; }
+}
+
+const histBody = document.getElementById('histBody');
+const histSearch = document.getElementById('histSearch');
+let allHistoryRows = [];
+
+function renderHistory(){
+  const q = histSearch.value.trim().toLowerCase();
+  const rows = q
+    ? allHistoryRows.filter(r => (r.title + ' ' + r.body).toLowerCase().includes(q))
+    : allHistoryRows;
+  if(rows.length === 0){
+    histBody.innerHTML = '<tr><td colspan="3" class="muted">기록이 없습니다.</td></tr>';
+    return;
+  }
+  histBody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${new Date(r.time).toLocaleString('ko-KR')}</td>
+      <td>${r.title}</td>
+      <td class="body">${r.body}</td>
+    </tr>`).join('');
+}
+
+async function refreshHistory(){
+  allHistoryRows = await getAllHistory();
+  renderHistory();
+}
+
+document.getElementById('histRefreshBtn').addEventListener('click', refreshHistory);
+histSearch.addEventListener('input', renderHistory);
+document.getElementById('histClearBtn').addEventListener('click', async () => {
+  if(!confirm('이 기기의 알람 기록을 전부 삭제할까요?')) return;
+  try{
+    const db = await openHistoryDB();
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+    tx.objectStore(HISTORY_STORE_NAME).clear();
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  }catch(e){ /* 무시 */ }
+  await refreshHistory();
+});
+
+refreshHistory();
+
+// --- 서버 중앙 기록 (alarm-history.json을 정적 파일로 그대로 fetch) ---
+const srvHistBody = document.getElementById('srvHistBody');
+const srvHistSearch = document.getElementById('srvHistSearch');
+let allSrvHistoryRows = [];
+
+function renderSrvHistory(){
+  const q = srvHistSearch.value.trim().toLowerCase();
+  const rows = q
+    ? allSrvHistoryRows.filter(r => (r.type + ' ' + r.studio + ' ' + r.message).toLowerCase().includes(q))
+    : allSrvHistoryRows;
+  if(rows.length === 0){
+    srvHistBody.innerHTML = '<tr><td colspan="4" class="muted">기록이 없습니다.</td></tr>';
+    return;
+  }
+  srvHistBody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${new Date(r.time).toLocaleString('ko-KR')}</td>
+      <td>${r.type}</td>
+      <td>${r.studio}</td>
+      <td>${r.message}</td>
+    </tr>`).join('');
+}
+
+async function refreshSrvHistory(){
+  try{
+    const res = await fetch('./alarm-history.json', { cache: 'no-store' });
+    if(!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    allSrvHistoryRows = (Array.isArray(data) ? data : []).sort((a,b) => new Date(b.time) - new Date(a.time));
+    renderSrvHistory();
+  }catch(e){
+    srvHistBody.innerHTML = `<tr><td colspan="4" class="warn">불러오기 실패 - GitHub Pages 주소로 배포된 상태에서 열어야 합니다 (${e.message})</td></tr>`;
+  }
+}
+
+document.getElementById('srvHistRefreshBtn').addEventListener('click', refreshSrvHistory);
+srvHistSearch.addEventListener('input', renderSrvHistory);
+refreshSrvHistory();
+</script>
+</body>
+</html>
