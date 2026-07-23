@@ -28,7 +28,9 @@ const SUB_CHECKS_PER_RUN = 4;        // 10초 x 4번 = 3번 확정(PRE_REQUIRED_
 
 const SUBS_FILE = 'subscriptions.json';
 const LOG_FILE = 'alerted-log.json';
-const PENDING_FILE = 'pending-log.json'; // 방송예고 후보가 "몇 번째 연속 확인"인지 기억하는 파일
+const PENDING_FILE = 'pending-log.json';
+const HISTORY_FILE = 'alarm-history.json'; // 팀 전체가 같이 볼 수 있는 서버발 알람 발송 기록 (기기 로컬 기록과 별개)
+const HISTORY_RETAIN_DAYS = 7;
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
@@ -133,7 +135,7 @@ function computeAlertsForSubscriber(settings, analysis, alertedLog, subId) {
 
 // 한 번의 "API 조회 + 판단 + 발송" 과정. main()에서 10초 간격으로 여러 번 호출됨
 // (같은 트리거 1회 실행 안에서 alertedLog/pendingLog/totalSent를 계속 이어받아 누적함)
-async function runOnePass(subscriptions, alertedLog, pendingLog, totals) {
+async function runOnePass(subscriptions, alertedLog, pendingLog, totals, historyLog, historyDedup) {
   const res = await fetch(API_URL, { headers: { Accept: 'application/json' } });
   if (!res.ok) { console.error('대시보드 조회 실패:', res.status); return; }
   const data = await res.json();
@@ -170,6 +172,12 @@ async function runOnePass(subscriptions, alertedLog, pendingLog, totals) {
         await webpush.sendNotification(sub, payload);
         totals.sent++;
         console.log(`발송: [${alert.type}] ${alert.studio} -> ${subId}`);
+        // 팀 전체가 같이 보는 서버 기록 - 구독자마다 반복 발송돼도 같은 사건은 한 번만 남김
+        const histKey = `${alert.type}|${alert.studio}|${alert.message}`;
+        if (!historyDedup.has(histKey)) {
+          historyDedup.add(histKey);
+          historyLog.push({ time: new Date().toISOString(), type: alert.type, studio: alert.studio, message: alert.message });
+        }
       } catch (err) {
         console.error(`발송 실패 (${alert.studio}, ${alert.type}):`, err.statusCode || err.message);
       }
@@ -199,13 +207,15 @@ async function main() {
 
   const alertedLog = loadJSON(LOG_FILE, {});
   const pendingLog = loadJSON(PENDING_FILE, {}); // key -> 지금까지 연속으로 확인된 횟수
+  const historyLog = loadJSON(HISTORY_FILE, []); // 팀 전체가 같이 보는 서버 발송 기록
+  const historyDedup = new Set();
   const totals = { sent: 0 };
 
   // 트리거는 Cloudflare가 1분마다 보내지만, 그 1번의 실행 안에서 10초 간격으로 여러 번
   // 재확인함 - 그러면 "3번 연속 확인"이 서로 다른 실행(총 2분)에 안 걸치고 한 번의
   // 실행(총 약 30초) 안에서 끝나서, 실제 알람 발동까지 걸리는 시간이 훨씬 짧아짐.
   for (let i = 0; i < SUB_CHECKS_PER_RUN; i++) {
-    await runOnePass(subscriptions, alertedLog, pendingLog, totals);
+    await runOnePass(subscriptions, alertedLog, pendingLog, totals, historyLog, historyDedup);
     if (i < SUB_CHECKS_PER_RUN - 1) await sleep(SUB_CHECK_INTERVAL_MS);
   }
 
@@ -218,6 +228,10 @@ async function main() {
   });
   fs.writeFileSync(LOG_FILE, JSON.stringify(alertedLog, null, 2));
   fs.writeFileSync(PENDING_FILE, JSON.stringify(pendingLog, null, 2));
+
+  const historyCutoff = now - HISTORY_RETAIN_DAYS * 24 * 60 * 60 * 1000;
+  const prunedHistory = historyLog.filter(e => new Date(e.time).getTime() >= historyCutoff);
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(prunedHistory, null, 2));
 }
 
 module.exports = { analyzeDashboard, computeAlertsForSubscriber, effectiveLiveSetting, normalizeSettings };
