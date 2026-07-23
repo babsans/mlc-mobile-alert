@@ -43,6 +43,13 @@
   }
   .alert-btn.on{color:var(--green); border-color:rgba(53,201,140,.5); background:rgba(53,201,140,.1);}
   .alert-btn.warn{color:var(--amber); border-color:rgba(224,168,58,.5); background:rgba(224,168,58,.1);}
+  .icon-btn{
+    position:absolute; top:16px; right:16px; width:30px; height:30px; z-index:5;
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+    border-radius:8px; border:1px solid var(--line); background:var(--panel);
+    color:var(--muted); -webkit-appearance:none;
+  }
+  .icon-btn.on{color:var(--green); border-color:rgba(53,201,140,.5); background:rgba(53,201,140,.1);}
   .alert-toast{
     position:fixed; left:14px; right:14px; top:calc(10px + env(safe-area-inset-top));
     z-index:50; background:var(--red); color:#fff; font-size:12px; font-weight:700;
@@ -138,6 +145,18 @@
     color:#fff; font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; padding:0;
   }
   .vol-slider{ display:none; }
+  .expand-close-btn{
+    position:absolute; top:8px; right:8px; z-index:2; display:none;
+    width:28px; height:28px; border-radius:50%; border:none; background:rgba(0,0,0,.6);
+    color:#fff; font-size:14px; align-items:center; justify-content:center; padding:0;
+  }
+  .live-preview.expanded{
+    position:fixed; inset:0; z-index:100; aspect-ratio:auto;
+    width:100vw !important; height:100vh !important;
+    border-radius:0; background:#000;
+  }
+  .live-preview.expanded video{ object-fit:contain; }
+  .live-preview.expanded .expand-close-btn{ display:flex; }
 
   .empty{text-align:center; padding:60px 20px; color:var(--muted); font-size:13px; line-height:1.7;}
   .empty b{color:var(--text);}
@@ -163,6 +182,7 @@
 <body>
 
 <header>
+  <button class="icon-btn" id="historyBtn" aria-label="알람 기록">📜</button>
   <h1>MLC 모바일 멀티뷰어</h1>
   <div class="sub"><span class="live-dot" id="liveDot"></span><span id="statusText">연결 중...</span></div>
   <div class="alert-bar">
@@ -172,7 +192,6 @@
     <button class="alert-btn" id="subscribeBtn">🔔 꺼져있어도 알림받기</button>
     <button class="alert-btn" id="alarmSettingsBtn">⚙️ 알람 설정</button>
     <button class="alert-btn" id="scheduleBtn">📋 오늘 편성</button>
-    <button class="alert-btn" id="historyBtn">📜 알람 기록</button>
     <button class="alert-btn" id="installBtn" style="display:none;">📲 앱으로 설치</button>
   </div>
 </header>
@@ -881,6 +900,7 @@ function buildCards(){
         </div>
         <div class="live-preview" id="preview-${studio}" style="display:none;">
           <span class="live-src-badge" id="srcbadge-${studio}"></span>
+          <button class="expand-close-btn" id="expandClose-${studio}">✕</button>
           <video id="video-${studio}" muted playsinline autoplay></video>
           <div class="live-controls">
             <button class="mute-btn" id="mute-${studio}">🔇</button>
@@ -904,6 +924,7 @@ function buildCards(){
       video: document.getElementById(`video-${studio}`),
       muteBtn: document.getElementById(`mute-${studio}`),
       volSlider: document.getElementById(`vol-${studio}`),
+      expandCloseBtn: document.getElementById(`expandClose-${studio}`),
     };
     activeSide[studio] = null;
     videoPrefs[studio] = { muted: true, volume: 1 };
@@ -921,6 +942,12 @@ function buildCards(){
       r.video.volume = v;
       videoPrefs[studio].volume = v;
     });
+
+    // 영상이 너무 작아서 더블클릭하면 전체화면 크기로 확대, X버튼으로 원래대로 복귀.
+    // video 엘리먼트를 그대로 두고 CSS(position:fixed)만 씌우는 방식이라 재생 중이던
+    // 스트림(hls.js 등)이 끊기지 않음.
+    r.video.addEventListener('dblclick', () => { r.preview.classList.add('expanded'); });
+    r.expandCloseBtn.addEventListener('click', () => { r.preview.classList.remove('expanded'); });
 
   });
   cardBuilt = true;
