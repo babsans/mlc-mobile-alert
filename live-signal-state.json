@@ -16,7 +16,7 @@
     "scheEndDtm": null
   },
   "M3_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-07-23T09:14:59+09:00"
   },
   "M3_slave": {
