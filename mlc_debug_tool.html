@@ -169,7 +169,7 @@ function computeScheduleEdges(items){
     if(!it.scheStrDtm) return;
     const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
     if(!name || !STUDIO_LIST.includes(name)) return;
-    const startTime = new Date(it.scheStrDtm.replace(' ', 'T')).getTime();
+    const startTime = new Date(it.scheStrDtm.replace(' ', 'T') + '+09:00').getTime();
     if(isNaN(startTime)) return;
     const diff = startTime - now;
     const entry = { startTime, scheStrDtm: it.scheStrDtm, title: it.bdTit || '' };
@@ -226,7 +226,7 @@ async function runDiagOnce(){
         const nowOnair = !!cur.onair;
         if(nowOnair && info.scheEndDtm) prevScheEnd[studio][side] = info.scheEndDtm;
         const remembered = prevScheEnd[studio][side];
-        const scheEndTime = remembered ? new Date(remembered.replace(' ', 'T')).getTime() : null;
+        const scheEndTime = remembered ? new Date(remembered.replace(' ', 'T') + '+09:00').getTime() : null;
         const pastEnd = scheEndTime !== null && now > scheEndTime;
         rows.push({
           studio, side,
