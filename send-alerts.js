@@ -1,6 +1,10 @@
-// MLC 방송 알람 발송 스크립트 (GitHub Actions에서 5분마다 실행) - v2
+// MLC 방송 알람 발송 스크립트 (GitHub Actions에서 1분마다 실행) - v3
 // -----------------------------------------------------------------
-// v1(고정 30/15/10/5분 다단계 리마인더)에서 변경:
+// v2에서 변경:
+//  - 방송예고(pre) 알람: "30분 전인데 신호없음"을 딱 한 번 확인하고 바로 보내던 방식에서,
+//    3번 연속(약 2분) 확인돼야 보내는 방식으로 변경 - 엘리멘탈 자동 송출시작 타이밍과
+//    우리 체크 타이밍이 겹쳐서 생기는 찰나의 시차성 오탐 방지 (신호끊김/재방송은 그대로 즉시 발송)
+//  - 감시 구간도 "문턱-10분~문턱" 좁은 구간에서 "문턱~방송시작" 전체로 확장
 //  - 구독자마다 다른 문턱(threshold)/개별방송 오버라이드/재방송 알람 on-off를 가짐
 //    (subscriptions.json의 각 항목에 붙은 settings 필드를 그대로 씀)
 //  - "시작 X분 전"이 됐다고 무조건 보내는 게 아니라, 그 시점에 신호(healthy)가
@@ -12,11 +16,18 @@ const webpush = require('web-push');
 
 const API_URL = 'https://mlc-api.cjoshopping.com/external/public/api/streamhistory/dashboard/v2/live';
 const STUDIO_LIST = ["M1","M2","M3","M5","M6","A","B","C","E","V1","V2","V3","ETC1","ETC2"];
-const CATCH_WINDOW = 10;     // 문턱을 최대 이만큼(분) 늦게 감지해도 놓치지 않고 보냄(크론 지연 대비)
 const RERUN_GRACE_MIN = 10;  // 재방송 편성시간이 지나고 이 안에는 "아직 안 뜬 것" 체크 대상으로 봄
+const PRE_REQUIRED_CONFIRMS = 3; // 방송예고 알람: 이 횟수만큼 연속으로 계속 신호없음이어야 실제 발송
+                                  // - 엘리멘탈 자동 송출시작(문턱과 같은 30분전 등)과 우리 체크 타이밍이
+                                  //   겹쳐서 생기는 찰나의 시차성 오탐을 걸러내기 위함
+const SUB_CHECK_INTERVAL_MS = 10000; // 트리거 1번(1분마다) 안에서 이 간격으로 여러 번 재확인
+const SUB_CHECKS_PER_RUN = 4;        // 10초 x 4번 = 3번 확정(PRE_REQUIRED_CONFIRMS) + 여유 1번, 약 30초 소요
 
 const SUBS_FILE = 'subscriptions.json';
 const LOG_FILE = 'alerted-log.json';
+const PENDING_FILE = 'pending-log.json'; // 방송예고 후보가 "몇 번째 연속 확인"인지 기억하는 파일
+
+function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 const DEFAULT_SETTINGS = { liveEnabled: true, liveThreshold: 30, rerunEnabled: true, overrides: {} };
 
@@ -103,7 +114,9 @@ function computeAlertsForSubscriber(settings, analysis, alertedLog, subId) {
       const eff = effectiveLiveSetting(settings, studio, info.scheStrDtm);
       if (!eff.enabled) return;
       const diffMin = (info.startTime - now) / 60000;
-      if (diffMin > eff.threshold || diffMin < eff.threshold - CATCH_WINDOW) return;
+      // 30분(문턱) 전부터 방송 시작 직전까지 계속(1분마다) 감시 대상 - 예전엔 "문턱-10분~문턱"
+      // 사이의 좁은 구간만 봤는데, 그러면 그 구간을 놓치면 다시는 체크 안 되는 문제가 있었음
+      if (diffMin > eff.threshold || diffMin < 0) return;
       if (healthy) return;
       const key = `${subId}_pre_${studio}_${info.scheStrDtm}_${eff.threshold}`;
       if (alertedLog[key]) return;
@@ -113,6 +126,55 @@ function computeAlertsForSubscriber(settings, analysis, alertedLog, subId) {
   });
 
   return toSend;
+}
+
+// 한 번의 "API 조회 + 판단 + 발송" 과정. main()에서 10초 간격으로 여러 번 호출됨
+// (같은 트리거 1회 실행 안에서 alertedLog/pendingLog/totalSent를 계속 이어받아 누적함)
+async function runOnePass(subscriptions, alertedLog, pendingLog, totals) {
+  const res = await fetch(API_URL, { headers: { Accept: 'application/json' } });
+  if (!res.ok) { console.error('대시보드 조회 실패:', res.status); return; }
+  const data = await res.json();
+  const items = Array.isArray(data.result) ? data.result : [];
+  const analysis = analyzeDashboard(items);
+
+  const seenThisPass = new Set(); // 이번 조회에서 조건이 참이었던 pre 알람 key들(연속 확인 끊김 감지용)
+
+  for (const sub of subscriptions) {
+    const settings = normalizeSettings(sub.settings);
+    const subId = (sub.endpoint || '').slice(-24);
+    const alerts = computeAlertsForSubscriber(settings, analysis, alertedLog, subId);
+
+    for (const alert of alerts) {
+      if (alert.type === 'pre') {
+        seenThisPass.add(alert.key);
+        const confirmCount = (pendingLog[alert.key] || 0) + 1;
+        if (confirmCount < PRE_REQUIRED_CONFIRMS) {
+          pendingLog[alert.key] = confirmCount; // 아직 연속 확인 부족 - 이번엔 발송 보류
+          console.log(`대기(${confirmCount}/${PRE_REQUIRED_CONFIRMS}): [${alert.type}] ${alert.studio} -> ${subId}`);
+          continue;
+        }
+        delete pendingLog[alert.key]; // 확인 완료 - 발송 진행
+      }
+
+      const payload = JSON.stringify({
+        title: `MLC 알람 - ${alert.studio}`,
+        body: alert.message,
+        tag: `mlc-${alert.type}-${alert.studio}`,
+      });
+      try {
+        await webpush.sendNotification(sub, payload);
+        totals.sent++;
+        console.log(`발송: [${alert.type}] ${alert.studio} -> ${subId}`);
+      } catch (err) {
+        console.error(`발송 실패 (${alert.studio}, ${alert.type}):`, err.statusCode || err.message);
+      }
+      alertedLog[alert.key] = new Date().toISOString();
+    }
+  }
+
+  // 이번 조회에서 조건이 더 이상 참이 아니게 된(신호가 정상으로 돌아온) pre 후보는
+  // 연속확인이 끊긴 것이므로 제거 - 그래야 나중에 다시 조건이 성립할 때 처음부터(1/3) 새로 카운트함
+  Object.keys(pendingLog).forEach(k => { if (!seenThisPass.has(k)) delete pendingLog[k]; });
 }
 
 async function main() {
@@ -131,37 +193,18 @@ async function main() {
   }
 
   const alertedLog = loadJSON(LOG_FILE, {});
+  const pendingLog = loadJSON(PENDING_FILE, {}); // key -> 지금까지 연속으로 확인된 횟수
+  const totals = { sent: 0 };
 
-  const res = await fetch(API_URL, { headers: { Accept: 'application/json' } });
-  if (!res.ok) { console.error('대시보드 조회 실패:', res.status); process.exit(1); }
-  const data = await res.json();
-  const items = Array.isArray(data.result) ? data.result : [];
-  const analysis = analyzeDashboard(items);
-
-  let totalSent = 0;
-  for (const sub of subscriptions) {
-    const settings = normalizeSettings(sub.settings);
-    const subId = (sub.endpoint || '').slice(-24);
-    const alerts = computeAlertsForSubscriber(settings, analysis, alertedLog, subId);
-
-    for (const alert of alerts) {
-      const payload = JSON.stringify({
-        title: `MLC 알람 - ${alert.studio}`,
-        body: alert.message,
-        tag: `mlc-${alert.type}-${alert.studio}`,
-      });
-      try {
-        await webpush.sendNotification(sub, payload);
-        totalSent++;
-        console.log(`발송: [${alert.type}] ${alert.studio} -> ${subId}`);
-      } catch (err) {
-        console.error(`발송 실패 (${alert.studio}, ${alert.type}):`, err.statusCode || err.message);
-      }
-      alertedLog[alert.key] = new Date().toISOString();
-    }
+  // 트리거는 Cloudflare가 1분마다 보내지만, 그 1번의 실행 안에서 10초 간격으로 여러 번
+  // 재확인함 - 그러면 "3번 연속 확인"이 서로 다른 실행(총 2분)에 안 걸치고 한 번의
+  // 실행(총 약 30초) 안에서 끝나서, 실제 알람 발동까지 걸리는 시간이 훨씬 짧아짐.
+  for (let i = 0; i < SUB_CHECKS_PER_RUN; i++) {
+    await runOnePass(subscriptions, alertedLog, pendingLog, totals);
+    if (i < SUB_CHECKS_PER_RUN - 1) await sleep(SUB_CHECK_INTERVAL_MS);
   }
 
-  console.log(`총 발송 ${totalSent}건 (구독자 ${subscriptions.length}명 대상)`);
+  console.log(`총 발송 ${totals.sent}건 (구독자 ${subscriptions.length}명 대상)`);
 
   const THREE_DAYS = 3 * 24 * 60 * 60 * 1000;
   const now = Date.now();
@@ -169,6 +212,7 @@ async function main() {
     if (now - new Date(alertedLog[k]).getTime() > THREE_DAYS) delete alertedLog[k];
   });
   fs.writeFileSync(LOG_FILE, JSON.stringify(alertedLog, null, 2));
+  fs.writeFileSync(PENDING_FILE, JSON.stringify(pendingLog, null, 2));
 }
 
 module.exports = { analyzeDashboard, computeAlertsForSubscriber, effectiveLiveSetting, normalizeSettings };
