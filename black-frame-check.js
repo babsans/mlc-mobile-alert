@@ -11,6 +11,8 @@ const API_URL = 'https://mlc-api.cjoshopping.com/external/public/api/streamhisto
 const STUDIO_LIST = ["M1","M2","M3","M5","M6","A","B","C","E","V1","V2","V3","ETC1","ETC2"];
 const SUBS_FILE = 'subscriptions.json';
 const STATE_FILE = 'blackframe-state.json';
+const HISTORY_FILE = 'alarm-history.json'; // 팀 전체가 같이 볼 수 있는 서버발 알람 발송 기록
+const HISTORY_RETAIN_DAYS = 7;
 const CHECK_SECONDS = 3; // 스트림에서 이만큼만 받아서 분석(전체 다운로드 안 함)
 
 function loadJSON(path, fallback) {
@@ -132,6 +134,19 @@ async function main() {
     }
   }
   console.log(`블랙화면 알림 발송: ${alerts.join(', ')} (구독자 ${targets.length}명)`);
+
+  const hist = loadJSON(HISTORY_FILE, []);
+  alerts.forEach((studio) => {
+    hist.push({
+      time: new Date().toISOString(),
+      type: 'blackframe',
+      studio,
+      message: `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`,
+    });
+  });
+  const cutoff = Date.now() - HISTORY_RETAIN_DAYS * 24 * 60 * 60 * 1000;
+  const pruned = hist.filter((e) => new Date(e.time).getTime() >= cutoff);
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(pruned, null, 2));
 }
 
 module.exports = { pickOnairUrls, isBlackOutput, decideAlerts };
