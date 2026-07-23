@@ -7,6 +7,8 @@ const fs = require('fs');
 const webpush = require('web-push');
 
 const SUBS_FILE = 'subscriptions.json';
+const HISTORY_FILE = 'alarm-history.json'; // 팀 전체가 같이 볼 수 있는 서버발 알람 발송 기록
+const HISTORY_RETAIN_DAYS = 7;
 
 function loadJSON(path, fallback) {
   try { return JSON.parse(fs.readFileSync(path, 'utf8')); }
@@ -55,6 +57,19 @@ async function main() {
     }
   }
   console.log(`발송 완료: ${sent}/${targets.length}명`);
+
+  if (sent > 0) {
+    const hist = loadJSON(HISTORY_FILE, []);
+    hist.push({
+      time: new Date().toISOString(),
+      type: 'signal-loss',
+      studio,
+      message: `${studio} 스튜디오 ${side} 신호가 끊겼습니다.`,
+    });
+    const cutoff = Date.now() - HISTORY_RETAIN_DAYS * 24 * 60 * 60 * 1000;
+    const pruned = hist.filter((e) => new Date(e.time).getTime() >= cutoff);
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(pruned, null, 2));
+  }
 }
 
 main().catch((err) => { console.error(err); process.exit(1); });
