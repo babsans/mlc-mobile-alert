@@ -52,8 +52,11 @@
   .alert-toast button{background:none; border:none; color:#fff; font-size:14px; padding:0 4px;}
 
   .sub-panel{
-    margin:0 14px 14px; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    position:fixed; left:14px; right:14px; z-index:40;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
     padding:12px 14px; font-size:11px; color:var(--muted); line-height:1.6;
+    max-height:calc(100vh - 90px); max-height:calc(100dvh - 90px); overflow-y:auto;
+    box-shadow:0 10px 30px rgba(0,0,0,.45);
   }
   .sub-panel code{color:var(--text); background:var(--panel-2); padding:1px 4px; border-radius:4px;}
   .sub-panel textarea{
@@ -72,6 +75,10 @@
   .sched-row-head .sched-time{color:var(--muted); margin-right:6px;}
   .sched-row-body{display:none; margin-top:8px; padding-left:4px;}
   .sched-row-body.open{display:block;}
+  .hist-empty{color:var(--muted); padding:8px 0;}
+  .hist-row{border-bottom:1px solid var(--line); padding:8px 0; font-size:11px; color:var(--text);}
+  .hist-row:last-child{border-bottom:none;}
+  .hist-time{color:var(--muted); margin-right:6px;}
   main{padding:6px 14px 40px;}
   .grid{display:grid; grid-template-columns:1fr; gap:10px;}
   @media(min-width:520px){ .grid{grid-template-columns:1fr 1fr;} }
@@ -165,6 +172,7 @@
     <button class="alert-btn" id="subscribeBtn">🔔 꺼져있어도 알림받기</button>
     <button class="alert-btn" id="alarmSettingsBtn">⚙️ 알람 설정</button>
     <button class="alert-btn" id="scheduleBtn">📋 오늘 편성</button>
+    <button class="alert-btn" id="historyBtn">📜 알람 기록</button>
     <button class="alert-btn" id="installBtn" style="display:none;">📲 앱으로 설치</button>
   </div>
 </header>
@@ -202,6 +210,14 @@
   <p>오늘 편성 - 방송을 탭하면 그 방송만 개별로 알람을 설정할 수 있습니다.</p>
   <p style="color:var(--amber);">※ 지금부터 약 3시간 이내 시작하는 방송만 표시됩니다. 더 나중 방송은 시작 3시간 전쯤 다시 열어 확인해 주세요.</p>
   <div id="scheduleList"></div>
+</div>
+
+<div class="sub-panel" id="historyPanel" style="display:none;">
+  <p>이 기기에서 울린 알람 기록입니다. (최근 7일치, 이 기기에만 저장됨 - 다른 기기와 공유되지 않습니다)</p>
+  <div id="historyList"></div>
+  <div style="margin-top:10px;">
+    <button class="alert-btn" id="historyClearBtn">기록 지우기</button>
+  </div>
 </div>
 
 <div class="sub-panel" id="iosInstallPanel" style="display:none;">
@@ -307,7 +323,7 @@ function showToast(message){
 }
 alertToastClose.addEventListener('click', () => { alertToast.style.display = 'none'; });
 
-function fireAlert(title, body, tag){
+function fireAlert(title, body, tag, skipHistory){
   showToast(body);
   playAlertBeep();
   if(navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
@@ -315,10 +331,11 @@ function fireAlert(title, body, tag){
     try{ new Notification(title, { body, tag }); }
     catch(e){ /* 일부 브라우저는 Notification 생성자 자체를 막을 수 있음 - 무시 */ }
   }
+  if(!skipHistory) addHistoryEntry(title, body); // "🧪 알림 테스트" 버튼은 skipHistory=true로 넘겨 기록 제외
 }
 
-function fireSignalAlert(studio, sideLabel){
-  fireAlert('MLC 신호끊김', `${studio} 스튜디오 ${sideLabel} 신호가 끊겼습니다.`, `mlc-${studio}-${sideLabel}`);
+function fireSignalAlert(studio, sideLabel, skipHistory){
+  fireAlert('MLC 신호끊김', `${studio} 스튜디오 ${sideLabel} 신호가 끊겼습니다.`, `mlc-${studio}-${sideLabel}`, skipHistory);
 }
 
 async function updateNotifyBtnUI(){
@@ -376,7 +393,7 @@ wakeBtn.addEventListener('click', async () => {
 });
 
 testAlertBtn.addEventListener('click', () => {
-  fireSignalAlert('테스트', 'MASTER');
+  fireSignalAlert('테스트', 'MASTER', true);
 });
 
 // --- 2단계 방송예고: Push 구독 생성 (처음엔 수동 등록 - 구독 정보를 화면에 보여주고
@@ -565,14 +582,34 @@ const signalLossEnabledChk = document.getElementById('signalLossEnabledChk');
 const blackFrameEnabledChk = document.getElementById('blackFrameEnabledChk');
 const alarmSettingsSaveBtn = document.getElementById('alarmSettingsSaveBtn');
 
+// --- 서브패널 공통 열기/닫기 ---
+// 패널을 position:fixed로 바꿨기 때문에(스크롤 내려도 안 보이던 문제 해결), 열 때마다
+// 헤더(스티키) 바로 아래 높이를 다시 계산해서 top 위치를 맞춰줘야 함 - 헤더 높이는
+// 알림바 버튼이 줄바꿈되는지 여부(화면 폭)에 따라 달라질 수 있어서 고정값을 못 씀.
+function positionSubPanel(panel){
+  const headerEl = document.querySelector('header');
+  panel.style.top = (headerEl.getBoundingClientRect().bottom + 6) + 'px';
+}
+function closeAllSubPanels(except){
+  document.querySelectorAll('.sub-panel').forEach(p => { if(p !== except) p.style.display = 'none'; });
+}
+function toggleSubPanel(panel){
+  const willOpen = panel.style.display !== 'block';
+  closeAllSubPanels(willOpen ? panel : null);
+  if(willOpen){ positionSubPanel(panel); panel.style.display = 'block'; }
+  return willOpen;
+}
+window.addEventListener('resize', () => {
+  document.querySelectorAll('.sub-panel').forEach(p => { if(p.style.display === 'block') positionSubPanel(p); });
+});
+
 alarmSettingsBtn.addEventListener('click', () => {
   liveEnabledChk.checked = alarmSettings.liveEnabled;
   liveThresholdSel.value = String(alarmSettings.liveThreshold);
   rerunEnabledChk.checked = alarmSettings.rerunEnabled;
   signalLossEnabledChk.checked = alarmSettings.signalLossEnabled;
   blackFrameEnabledChk.checked = alarmSettings.blackFrameEnabled;
-  schedulePanel.style.display = 'none';
-  alarmSettingsPanel.style.display = alarmSettingsPanel.style.display === 'block' ? 'none' : 'block';
+  toggleSubPanel(alarmSettingsPanel);
 });
 
 alarmSettingsSaveBtn.addEventListener('click', async () => {
@@ -661,10 +698,108 @@ function buildScheduleList(){
 }
 
 scheduleBtn.addEventListener('click', () => {
-  alarmSettingsPanel.style.display = 'none';
-  const willOpen = schedulePanel.style.display !== 'block';
-  schedulePanel.style.display = willOpen ? 'block' : 'none';
+  const willOpen = toggleSubPanel(schedulePanel);
   if(willOpen) buildScheduleList();
+});
+
+// --- 알람 기록 (IndexedDB, 이 기기 로컬 전용) ---
+// localStorage는 Service Worker(백그라운드 Push 수신)에서 접근할 수 없어서 IndexedDB를 씀.
+// 포그라운드 알람(fireAlert)과 백그라운드 Push 알람(sw.js) 둘 다 같은 곳에 기록해서,
+// "이 기기에서 실제로 울린 알람"을 한곳에서 모아 보여줌.
+const HISTORY_DB_NAME = 'mlc-history';
+const HISTORY_STORE_NAME = 'alarms';
+const HISTORY_RETAIN_DAYS = 7;
+
+function openHistoryDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HISTORY_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if(!db.objectStoreNames.contains(HISTORY_STORE_NAME)){
+        db.createObjectStore(HISTORY_STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function addHistoryEntry(title, body){
+  try{
+    const db = await openHistoryDB();
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+    tx.objectStore(HISTORY_STORE_NAME).add({ time: Date.now(), title, body });
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+    pruneHistory(db); // 실패해도 조용히 무시(다음 기록 때 다시 시도됨)
+  }catch(e){ /* IndexedDB 미지원/오류 - 기록만 못 남기고 알람 자체는 정상 동작 */ }
+}
+
+function pruneHistory(db){
+  const cutoff = Date.now() - HISTORY_RETAIN_DAYS * 24 * 60 * 60 * 1000;
+  const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+  const store = tx.objectStore(HISTORY_STORE_NAME);
+  const req = store.openCursor();
+  req.onsuccess = () => {
+    const cursor = req.result;
+    if(!cursor) return;
+    if(cursor.value.time < cutoff) cursor.delete();
+    cursor.continue();
+  };
+}
+
+async function getAllHistory(){
+  try{
+    const db = await openHistoryDB();
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readonly');
+    const req = tx.objectStore(HISTORY_STORE_NAME).getAll();
+    const rows = await new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return rows.sort((a, b) => b.time - a.time);
+  }catch(e){ return []; }
+}
+
+function fmtHistTime(ts){
+  const d = new Date(ts);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const timeStr = d.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
+  if(sameDay) return timeStr;
+  return d.toLocaleDateString('ko-KR', {month:'numeric', day:'numeric'}) + ' ' + timeStr;
+}
+
+async function buildHistoryList(){
+  const rows = await getAllHistory();
+  if(rows.length === 0){
+    historyList.innerHTML = '<p class="hist-empty">아직 기록된 알람이 없습니다.</p>';
+    return;
+  }
+  historyList.innerHTML = rows.map(r => `
+    <div class="hist-row">
+      <span class="hist-time">${fmtHistTime(r.time)}</span><b>${r.title}</b> - ${r.body}
+    </div>`).join('');
+}
+
+const historyBtn = document.getElementById('historyBtn');
+const historyPanel = document.getElementById('historyPanel');
+const historyList = document.getElementById('historyList');
+const historyClearBtn = document.getElementById('historyClearBtn');
+
+historyBtn.addEventListener('click', async () => {
+  const willOpen = toggleSubPanel(historyPanel);
+  if(willOpen) await buildHistoryList();
+});
+
+historyClearBtn.addEventListener('click', async () => {
+  try{
+    const db = await openHistoryDB();
+    const tx = db.transaction(HISTORY_STORE_NAME, 'readwrite');
+    tx.objectStore(HISTORY_STORE_NAME).clear();
+    await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); });
+  }catch(e){ /* 무시 */ }
+  await buildHistoryList();
+  showToast('알람 기록을 지웠습니다.');
 });
 
 // --- 홈 화면 앱 설치 ---
@@ -681,9 +816,7 @@ if(!isStandalone){
     // iOS Safari는 설치 팝업 API가 없어서 안내 패널로 대체
     installBtn.style.display = 'inline-flex';
     installBtn.addEventListener('click', () => {
-      schedulePanel.style.display = 'none';
-      alarmSettingsPanel.style.display = 'none';
-      iosInstallPanel.style.display = iosInstallPanel.style.display === 'block' ? 'none' : 'block';
+      toggleSubPanel(iosInstallPanel);
     });
   } else {
     // Android/Chrome 계열은 브라우저가 제공하는 실제 설치 프롬프트를 그대로 씀
