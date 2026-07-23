@@ -1068,30 +1068,32 @@ async function fetchAndRender(){
       const sub = liveByType['SUB'];
       // onair는 "실제로 방송 신호가 들어오고 있는지"를 뜻함 - isRecording(방송 시작됨)
       // 만으로는 부족하고, isHealthy(신호 정상 수신)까지 같이 참이어야 함.
-      const newInfo = {
-        master: main ? {onair: !!main.isRecording && !!main.isHealthy, healthy: !!main.isHealthy, rec: !!main.isRecording} : null,
-        slave: sub ? {onair: !!sub.isRecording && !!sub.isHealthy, healthy: !!sub.isHealthy, rec: !!sub.isRecording} : null,
-        title: it.bdTit || '',
-        mainUrl: it.mainRecvUrl || null,
-        subUrl: it.subRecvUrl || null,
-        scheStrDtm: it.scheStrDtm || null,
-        scheEndDtm: it.scheEndDtm || null,
-      };
+      const newMaster = main ? {onair: !!main.isRecording && !!main.isHealthy, healthy: !!main.isHealthy, rec: !!main.isRecording} : null;
+      const newSlave = sub ? {onair: !!sub.isRecording && !!sub.isHealthy, healthy: !!sub.isHealthy, rec: !!sub.isRecording} : null;
+
       // 같은 스튜디오(mappNm)로 항목이 두 개 이상 올 수 있음 (예: 현재 방송 + 다음
-      // 예정 방송이 동시에 내려오는 경우). 그냥 덮어쓰면 아직 시작 안 한/이미 끝난
-      // 항목이 화면을 차지할 수 있으므로 우선순위를 매김: onair(공식 방송 중) > healthy
-      // (신호는 있으나 아직 공식 방송 전) > 그 외. 그래야 신호만 먼저 들어온 항목이
-      // 병합 단계에서 버려지지 않고 살아남아 영상 미리보기에 쓰일 수 있음.
-      const rank = (s) => {
-        if(!s) return 0;
-        const onair = (s.master && s.master.onair) || (s.slave && s.slave.onair);
-        if(onair) return 2;
-        const healthy = (s.master && s.master.healthy) || (s.slave && s.slave.healthy);
-        return healthy ? 1 : 0;
-      };
-      const existing = byStudio[name];
-      if(!existing || rank(newInfo) > rank(existing)){
-        byStudio[name] = newInfo;
+      // 예정 방송이 동시에 내려오는 경우). 예전엔 "더 우선순위 높은 항목 하나를 통째로
+      // 채택"하는 방식이었는데, 그러면 예를 들어 항목A의 MASTER가 정상인데 항목B가
+      // (SLAVE 덕분에) 전체 순위가 더 높다는 이유로 선택되면서 항목A의 정상인 MASTER
+      // 정보가 통째로 버려지고 항목B의 MASTER 상태(비정상일 수 있음)로 잘못 표시되는
+      // 문제가 있었음 - 그래서 MASTER/SLAVE 각각 독립적으로, 더 우선순위 높은 쪽만 채택.
+      const sideRank = (s) => { if(!s) return 0; if(s.onair) return 2; return s.healthy ? 1 : 0; };
+      if(!byStudio[name]){
+        byStudio[name] = { master: null, slave: null, title: '', mainUrl: null, subUrl: null, scheStrDtm: null, scheEndDtm: null, _metaRank: -1 };
+      }
+      const entry = byStudio[name];
+      if(sideRank(newMaster) > sideRank(entry.master)) entry.master = newMaster;
+      if(sideRank(newSlave) > sideRank(entry.slave)) entry.slave = newSlave;
+      // 방송명/스케줄/미리보기URL 같은 "항목 단위" 정보는 기존처럼 전체 우선순위가
+      // 가장 높은 항목 걸로 채택 (이 부분은 기존 동작 유지)
+      const overallRank = Math.max(sideRank(newMaster), sideRank(newSlave));
+      if(overallRank > entry._metaRank){
+        entry.title = it.bdTit || '';
+        entry.mainUrl = it.mainRecvUrl || null;
+        entry.subUrl = it.subRecvUrl || null;
+        entry.scheStrDtm = it.scheStrDtm || null;
+        entry.scheEndDtm = it.scheEndDtm || null;
+        entry._metaRank = overallRank;
       }
     });
 
