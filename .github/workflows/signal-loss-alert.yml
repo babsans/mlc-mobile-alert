@@ -1,3 +1,9 @@
+# 신호끊김 알림 발송 워크플로
+# -----------------------------------------------------------------
+# 이 워크플로는 사람이 직접 실행하지 않음. Cloudflare Worker가 1분마다 신호를
+# 감시하다가 끊김을 감지하면, GitHub API로 이 워크플로를 원격 실행시켜서
+# 실제 Push 발송을 맡김(검증된 Node/web-push 파이프라인 재사용).
+
 name: 신호끊김 알림 발송
 on:
   workflow_dispatch:
@@ -12,6 +18,8 @@ on:
 jobs:
   send-signal-loss-alert:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # alarm-history.json을 커밋해서 저장소에 저장하려면 필요
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,3 +33,10 @@ jobs:
           STUDIO: ${{ github.event.inputs.studio }}
           SIDE: ${{ github.event.inputs.side }}
         run: node signal-loss-send.js
+      - name: 발송 기록 저장소에 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add alarm-history.json
+          git diff --cached --quiet || git commit -m "신호끊김 발송 기록 업데이트 [skip ci]"
+          git push
