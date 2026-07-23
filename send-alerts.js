@@ -1,9 +1,12 @@
-// MLC 방송 알람 발송 스크립트 (GitHub Actions에서 1분마다 실행) - v3
+// MLC 방송 알람 발송 스크립트 (GitHub Actions에서 1분마다 실행) - v4
 // -----------------------------------------------------------------
+// v3에서 변경:
+//  - 재방송(rerun) 알람에도 방송예고와 동일한 3회 연속확인 게이트를 적용 - 재방송도
+//    같은 엘리멘탈 자동화가 편성 전환을 처리하므로 동일한 시차성 오탐 가능성이 있어서
 // v2에서 변경:
 //  - 방송예고(pre) 알람: "30분 전인데 신호없음"을 딱 한 번 확인하고 바로 보내던 방식에서,
-//    3번 연속(약 2분) 확인돼야 보내는 방식으로 변경 - 엘리멘탈 자동 송출시작 타이밍과
-//    우리 체크 타이밍이 겹쳐서 생기는 찰나의 시차성 오탐 방지 (신호끊김/재방송은 그대로 즉시 발송)
+//    3번 연속(10초씩 총 약 20~30초) 확인돼야 보내는 방식으로 변경 - 엘리멘탈 자동 송출시작
+//    타이밍과 우리 체크 타이밍이 겹쳐서 생기는 찰나의 시차성 오탐 방지 (신호끊김은 그대로 즉시 발송)
 //  - 감시 구간도 "문턱-10분~문턱" 좁은 구간에서 "문턱~방송시작" 전체로 확장
 //  - 구독자마다 다른 문턱(threshold)/개별방송 오버라이드/재방송 알람 on-off를 가짐
 //    (subscriptions.json의 각 항목에 붙은 settings 필드를 그대로 씀)
@@ -17,7 +20,7 @@ const webpush = require('web-push');
 const API_URL = 'https://mlc-api.cjoshopping.com/external/public/api/streamhistory/dashboard/v2/live';
 const STUDIO_LIST = ["M1","M2","M3","M5","M6","A","B","C","E","V1","V2","V3","ETC1","ETC2"];
 const RERUN_GRACE_MIN = 10;  // 재방송 편성시간이 지나고 이 안에는 "아직 안 뜬 것" 체크 대상으로 봄
-const PRE_REQUIRED_CONFIRMS = 3; // 방송예고 알람: 이 횟수만큼 연속으로 계속 신호없음이어야 실제 발송
+const PRE_REQUIRED_CONFIRMS = 3; // 방송예고·재방송 알람: 이 횟수만큼 연속으로 계속 신호없음이어야 실제 발송
                                   // - 엘리멘탈 자동 송출시작(문턱과 같은 30분전 등)과 우리 체크 타이밍이
                                   //   겹쳐서 생기는 찰나의 시차성 오탐을 걸러내기 위함
 const SUB_CHECK_INTERVAL_MS = 10000; // 트리거 1번(1분마다) 안에서 이 간격으로 여러 번 재확인
@@ -145,7 +148,9 @@ async function runOnePass(subscriptions, alertedLog, pendingLog, totals) {
     const alerts = computeAlertsForSubscriber(settings, analysis, alertedLog, subId);
 
     for (const alert of alerts) {
-      if (alert.type === 'pre') {
+      // 방송예고(pre)/재방송(rerun) 둘 다 엘리멘탈 자동화 타이밍과 겹쳐서 생기는
+      // 시차성 오탐이 있을 수 있어 같은 연속확인 게이트를 적용함 (신호끊김/블랙화면은 해당 없음)
+      if (alert.type === 'pre' || alert.type === 'rerun') {
         seenThisPass.add(alert.key);
         const confirmCount = (pendingLog[alert.key] || 0) + 1;
         if (confirmCount < PRE_REQUIRED_CONFIRMS) {
