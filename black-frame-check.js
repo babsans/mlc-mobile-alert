@@ -123,7 +123,7 @@ async function main() {
   for (const studio of alerts) {
     const payload = JSON.stringify({
       title: `MLC 블랙화면 감지 - ${studio}`,
-      body: `${studio} 스튜디오 - 연결은 정상인데 화면이 까맣게 나오고 있습니다.`,
+      body: `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`,
       tag: `mlc-black-${studio}`,
     });
     for (const sub of targets) {
