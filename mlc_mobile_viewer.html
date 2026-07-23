@@ -292,6 +292,8 @@ let wakeEnabled = localStorage.getItem('mlc_wake_enabled') === '1';
 const prevOnair = {};   // studio -> {master: bool, slave: bool} - 직전 onair 상태
 const alerted = {};     // studio -> {master: bool, slave: bool} - 이미 알림 보냈는지(복구 전까지 중복 방지)
 const alertedBroadcast = {}; // "pre_스튜디오_시간_문턱" / "rerun_스튜디오_시간" -> true (방송예고/재방송 알림 중복방지)
+const broadcastConfirmCount = {}; // 위와 같은 key -> 연속으로 조건 참이었던 횟수 (찰나의 시차 오탐 방지, 서버쪽 3연속확인과 동일한 개념)
+const BROADCAST_CONFIRM_TICKS = 3; // 5초 주기 x 3번 = 약 15초 연속 확인돼야 발동
 const prevScheEnd = {}; // studio -> {master: scheEndDtm|null, slave: scheEndDtm|null} - 방송 중일 때의
                          // 종료예정시각을 기억해둠(같은 스튜디오의 다음 프로그램 정보가 섞여 들어와도
                          // 헷갈리지 않도록, "지금 꺼진 그 방송"의 종료시각만 정확히 씀)
@@ -1154,6 +1156,8 @@ async function fetchAndRender(){
 
       // 방송시작전 신호체크(라이브)/재방송 시간체크: 신호끊김 감지와는 별개의 알림.
       // 스튜디오 전체(master/slave 중 하나라도) healthy 여부만 봄.
+      // 엘리멘탈 자동 송출시작 타이밍과 겹쳐서 생기는 찰나의 시차성 오탐을 걸러내기 위해,
+      // 블랙화면과 동일하게 연속 3번(약 15초) 계속 신호없음이어야 실제로 알림을 울림.
       const anyHealthy = !!(info && ((info.master && info.master.healthy) || (info.slave && info.slave.healthy)));
       const isRerun = studio.startsWith('V');
       if(isRerun){
@@ -1163,8 +1167,13 @@ async function fetchAndRender(){
             const diffMin = (Date.now() - jp.startTime) / 60000;
             const rkey = `rerun_${studio}_${jp.scheStrDtm}`;
             if(diffMin >= 0 && diffMin <= 10 && !anyHealthy && !alertedBroadcast[rkey]){
-              fireAlert('MLC 재방송 알람', `${studio} 재방송 시간인데 영상이 안 뜹니다.`, rkey);
-              alertedBroadcast[rkey] = true;
+              broadcastConfirmCount[rkey] = (broadcastConfirmCount[rkey] || 0) + 1;
+              if(broadcastConfirmCount[rkey] >= BROADCAST_CONFIRM_TICKS){
+                fireAlert('MLC 재방송 알람', `${studio} 재방송 시간인데 영상이 안 뜹니다.`, rkey);
+                alertedBroadcast[rkey] = true;
+              }
+            } else {
+              broadcastConfirmCount[rkey] = 0; // 중간에 신호 돌아오면 카운트 리셋
             }
           }
         }
@@ -1176,8 +1185,13 @@ async function fetchAndRender(){
             const diffMin = (nf.startTime - Date.now()) / 60000;
             const pkey = `pre_${studio}_${nf.scheStrDtm}_${eff.threshold}`;
             if(diffMin <= eff.threshold && diffMin >= 0 && !anyHealthy && !alertedBroadcast[pkey]){
-              fireAlert('MLC 방송예고', `${studio} 방송 ${eff.threshold}분 전인데 신호가 없습니다.`, pkey);
-              alertedBroadcast[pkey] = true;
+              broadcastConfirmCount[pkey] = (broadcastConfirmCount[pkey] || 0) + 1;
+              if(broadcastConfirmCount[pkey] >= BROADCAST_CONFIRM_TICKS){
+                fireAlert('MLC 방송예고', `${studio} 방송 ${eff.threshold}분 전인데 신호가 없습니다.`, pkey);
+                alertedBroadcast[pkey] = true;
+              }
+            } else {
+              broadcastConfirmCount[pkey] = 0; // 중간에 신호 돌아오면 카운트 리셋
             }
           }
         }
