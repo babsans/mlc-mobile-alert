@@ -660,7 +660,7 @@ const scheduleList = document.getElementById('scheduleList');
 let lastItems = []; // fetchAndRender에서 매번 최신 원본 목록으로 갱신됨
 
 function fmtTime(scheStrDtm){
-  const d = new Date(scheStrDtm.replace(' ', 'T'));
+  const d = new Date(scheStrDtm.replace(' ', 'T') + '+09:00');
   if(isNaN(d.getTime())) return scheStrDtm;
   return d.toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'});
 }
@@ -1082,15 +1082,26 @@ async function fetchAndRender(){
         byStudio[name] = { master: null, slave: null, title: '', mainUrl: null, subUrl: null, scheStrDtm: null, scheEndDtm: null, _metaRank: -1 };
       }
       const entry = byStudio[name];
-      if(sideRank(newMaster) > sideRank(entry.master)) entry.master = newMaster;
-      if(sideRank(newSlave) > sideRank(entry.slave)) entry.slave = newSlave;
-      // 방송명/스케줄/미리보기URL 같은 "항목 단위" 정보는 기존처럼 전체 우선순위가
-      // 가장 높은 항목 걸로 채택 (이 부분은 기존 동작 유지)
+      // mainUrl/scheEndDtm/scheStrDtm은 각 쪽의 상태(master/slave)가 채택되는 바로 그 항목에서
+      // 같이 가져옴 - 상태는 항목A 기준인데 종료시각/URL은 항목B 것을 쓰는 불일치가 생기지
+      // 않도록(예전에 겪었던 "다음 프로그램 정보 섞임" 버그가 다른 경로로 재발하지 않게)
+      if(sideRank(newMaster) > sideRank(entry.master)){
+        newMaster.scheEndDtm = it.scheEndDtm || null;
+        newMaster.scheStrDtm = it.scheStrDtm || null;
+        entry.master = newMaster;
+        entry.mainUrl = it.mainRecvUrl || null;
+      }
+      if(sideRank(newSlave) > sideRank(entry.slave)){
+        newSlave.scheEndDtm = it.scheEndDtm || null;
+        newSlave.scheStrDtm = it.scheStrDtm || null;
+        entry.slave = newSlave;
+        entry.subUrl = it.subRecvUrl || null;
+      }
+      // 방송명은 화면 표시용(카드 제목)이라 전체 우선순위가 가장 높은 항목 걸로 채택 -
+      // 알람 판정에는 안 쓰이므로 위와 달리 엄격한 일치가 필요 없음
       const overallRank = Math.max(sideRank(newMaster), sideRank(newSlave));
       if(overallRank > entry._metaRank){
         entry.title = it.bdTit || '';
-        entry.mainUrl = it.mainRecvUrl || null;
-        entry.subUrl = it.subRecvUrl || null;
         entry.scheStrDtm = it.scheStrDtm || null;
         entry.scheEndDtm = it.scheEndDtm || null;
         entry._metaRank = overallRank;
@@ -1110,7 +1121,7 @@ async function fetchAndRender(){
         if(!it.scheStrDtm) return;
         const name = studioFromChnCd(it.mainChnCd) || studioFromChnCd(it.subChnCd);
         if(!name || !STUDIO_LIST.includes(name)) return;
-        const startTime = new Date(it.scheStrDtm.replace(' ', 'T')).getTime();
+        const startTime = new Date(it.scheStrDtm.replace(' ', 'T') + '+09:00').getTime();
         if(isNaN(startTime)) return;
         const diff = startTime - nowMs;
         const entry = { startTime, scheStrDtm: it.scheStrDtm };
@@ -1147,10 +1158,10 @@ async function fetchAndRender(){
         const cur = info && info[side];
         const nowOnair = !!(cur && cur.onair);
         const nowHealthy = !!(cur && cur.healthy);
-        if(nowOnair && info && info.scheEndDtm){
-          prevScheEnd[studio][side] = info.scheEndDtm;
+        if(nowOnair && cur && cur.scheEndDtm){
+          prevScheEnd[studio][side] = cur.scheEndDtm;
         }
-        const scheEndTime = prevScheEnd[studio][side] ? new Date(prevScheEnd[studio][side].replace(' ', 'T')).getTime() : null;
+        const scheEndTime = prevScheEnd[studio][side] ? new Date(prevScheEnd[studio][side].replace(' ', 'T') + '+09:00').getTime() : null;
         const pastScheduledEnd = scheEndTime !== null && Date.now() > scheEndTime;
         if(prevOnair[studio][side] && !nowHealthy && !alerted[studio][side] && !pastScheduledEnd){
           const nf = nextFuture[studio];
