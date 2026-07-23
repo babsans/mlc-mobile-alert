@@ -304,6 +304,7 @@ STUDIO_LIST.forEach(s => { prevOnair[s] = {master:false, slave:false}; alerted[s
 const blackCanvas = document.createElement('canvas');
 const blackCtx = blackCanvas.getContext('2d', { willReadFrequently: true });
 const blackFrameCount = {};    // studio -> 연속으로 까맣게 감지된 횟수
+const blackFrameSamples = {};  // studio -> 최근 밝기값 배열 (알림 발동시 진단정보로 같이 남김)
 const blackFrameAlerted = {};  // studio -> 이미 알림 보냈는지(복구 전까지 중복 방지)
 const BLACK_THRESHOLD = 12;    // 평균 밝기(0~255)가 이 아래면 "까맣다"고 판단
 const BLACK_CONFIRM_TICKS = 3; // 이만큼 연속으로 까매야 알림(순간적인 암전은 무시)
@@ -349,7 +350,7 @@ function showToast(message){
 }
 alertToastClose.addEventListener('click', () => { alertToast.style.display = 'none'; });
 
-function fireAlert(title, body, tag, skipHistory){
+function fireAlert(title, body, tag, skipHistory, historyDetail){
   showToast(body);
   playAlertBeep();
   if(navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
@@ -357,11 +358,13 @@ function fireAlert(title, body, tag, skipHistory){
     try{ new Notification(title, { body, tag }); }
     catch(e){ /* 일부 브라우저는 Notification 생성자 자체를 막을 수 있음 - 무시 */ }
   }
-  if(!skipHistory) addHistoryEntry(title, body); // "🧪 알림 테스트" 버튼은 skipHistory=true로 넘겨 기록 제외
+  // historyDetail이 있으면(진단정보) 사용자에게 보이는 알림 문구는 그대로 두고,
+  // 기록에만 진단용 상세정보를 덧붙여 남김 - 다음에 같은 문제가 재현됐을 때 원인을 바로 알 수 있게
+  if(!skipHistory) addHistoryEntry(title, historyDetail ? `${body} ${historyDetail}` : body);
 }
 
-function fireSignalAlert(studio, sideLabel, skipHistory){
-  fireAlert('MLC 신호끊김', `${studio} 스튜디오 ${sideLabel} 신호가 끊겼습니다.`, `mlc-${studio}-${sideLabel}`, skipHistory);
+function fireSignalAlert(studio, sideLabel, skipHistory, historyDetail){
+  fireAlert('MLC 신호끊김', `${studio} 스튜디오 ${sideLabel} 신호가 끊겼습니다.`, `mlc-${studio}-${sideLabel}`, skipHistory, historyDetail);
 }
 
 async function updateNotifyBtnUI(){
@@ -1066,8 +1069,8 @@ async function fetchAndRender(){
       // onair는 "실제로 방송 신호가 들어오고 있는지"를 뜻함 - isRecording(방송 시작됨)
       // 만으로는 부족하고, isHealthy(신호 정상 수신)까지 같이 참이어야 함.
       const newInfo = {
-        master: main ? {onair: !!main.isRecording && !!main.isHealthy, healthy: !!main.isHealthy} : null,
-        slave: sub ? {onair: !!sub.isRecording && !!sub.isHealthy, healthy: !!sub.isHealthy} : null,
+        master: main ? {onair: !!main.isRecording && !!main.isHealthy, healthy: !!main.isHealthy, rec: !!main.isRecording} : null,
+        slave: sub ? {onair: !!sub.isRecording && !!sub.isHealthy, healthy: !!sub.isHealthy, rec: !!sub.isRecording} : null,
         title: it.bdTit || '',
         mainUrl: it.mainRecvUrl || null,
         subUrl: it.subRecvUrl || null,
@@ -1148,7 +1151,12 @@ async function fetchAndRender(){
         const scheEndTime = prevScheEnd[studio][side] ? new Date(prevScheEnd[studio][side].replace(' ', 'T')).getTime() : null;
         const pastScheduledEnd = scheEndTime !== null && Date.now() > scheEndTime;
         if(prevOnair[studio][side] && !nowHealthy && !alerted[studio][side] && !pastScheduledEnd){
-          fireSignalAlert(studio, side === 'master' ? 'MASTER' : 'SLAVE');
+          const nf = nextFuture[studio];
+          const minsToNext = nf ? ((nf.startTime - Date.now()) / 60000).toFixed(1) : null;
+          const diag = `[진단: 기억된종료시각 ${prevScheEnd[studio][side] || '없음'} / `
+            + `다음편성 ${nf ? nf.scheStrDtm + '(' + minsToNext + '분후)' : '없음'} / `
+            + `isRecording ${!!(cur && cur.rec)}]`;
+          fireSignalAlert(studio, side === 'master' ? 'MASTER' : 'SLAVE', false, diag);
           alerted[studio][side] = true;
         }
         if(nowHealthy) alerted[studio][side] = false; // 복구되면 다음 끊김 때 다시 알릴 수 있게 초기화
@@ -1170,7 +1178,8 @@ async function fetchAndRender(){
             if(diffMin >= 0 && diffMin <= 10 && !anyHealthy && !alertedBroadcast[rkey]){
               broadcastConfirmCount[rkey] = (broadcastConfirmCount[rkey] || 0) + 1;
               if(broadcastConfirmCount[rkey] >= BROADCAST_CONFIRM_TICKS){
-                fireAlert('MLC 재방송 알람', `${studio} 재방송 시간인데 영상이 안 뜹니다.`, rkey);
+                const diag = `[진단: 편성시작후 ${diffMin.toFixed(1)}분 경과 / 연속확인 ${broadcastConfirmCount[rkey]}회]`;
+                fireAlert('MLC 재방송 알람', `${studio} 재방송 시간인데 영상이 안 뜹니다.`, rkey, false, diag);
                 alertedBroadcast[rkey] = true;
               }
             } else {
@@ -1188,7 +1197,8 @@ async function fetchAndRender(){
             if(diffMin <= eff.threshold && diffMin >= 0 && !anyHealthy && !alertedBroadcast[pkey]){
               broadcastConfirmCount[pkey] = (broadcastConfirmCount[pkey] || 0) + 1;
               if(broadcastConfirmCount[pkey] >= BROADCAST_CONFIRM_TICKS){
-                fireAlert('MLC 방송예고', `${studio} 방송 ${eff.threshold}분 전인데 신호가 없습니다.`, pkey);
+                const diag = `[진단: 시작까지 ${diffMin.toFixed(1)}분 / 문턱 ${eff.threshold}분 / 연속확인 ${broadcastConfirmCount[pkey]}회]`;
+                fireAlert('MLC 방송예고', `${studio} 방송 ${eff.threshold}분 전인데 신호가 없습니다.`, pkey, false, diag);
                 alertedBroadcast[pkey] = true;
               }
             } else {
@@ -1229,10 +1239,19 @@ async function fetchAndRender(){
         } else {
           const brightness = sampleBrightness(r.video);
           if(brightness !== null){
+            // 원인 진단용: 최근 밝기값들을 계속 기록해뒀다가, 실제로 알림이 울릴 때
+            // 함께 남겨서 다음에 재현되면 "진짜 까만 화면"인지 "글리치"인지 구분할 수 있게 함
+            if(!blackFrameSamples[studio]) blackFrameSamples[studio] = [];
+            blackFrameSamples[studio].push(Math.round(brightness));
+            if(blackFrameSamples[studio].length > BLACK_CONFIRM_TICKS + 2) blackFrameSamples[studio].shift();
+
             if(brightness < BLACK_THRESHOLD){
               blackFrameCount[studio] = (blackFrameCount[studio] || 0) + 1;
               if(blackFrameCount[studio] >= BLACK_CONFIRM_TICKS && !blackFrameAlerted[studio]){
-                fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`, `mlc-black-${studio}`);
+                const diag = `[진단: 최근밝기 ${blackFrameSamples[studio].join(',')} / `
+                  + `재생위치 ${curTime.toFixed(1)}s / readyState ${r.video.readyState} / `
+                  + `해상도 ${r.video.videoWidth}x${r.video.videoHeight}]`;
+                fireAlert('MLC 블랙화면 감지', `${studio} 스튜디오 - 연결은 정상이지만 화면이 블랙화면으로 송출됩니다.`, `mlc-black-${studio}`, false, diag);
                 blackFrameAlerted[studio] = true;
               }
             }else{
