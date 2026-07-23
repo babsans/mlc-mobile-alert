@@ -79,7 +79,7 @@ function analyzeDashboard(items) {
     else if (!(name in healthyMap)) healthyMap[name] = false;
 
     if (!it.scheStrDtm) return;
-    const startTime = new Date(it.scheStrDtm.replace(' ', 'T')).getTime();
+    const startTime = new Date(it.scheStrDtm.replace(' ', 'T') + '+09:00').getTime();
     if (isNaN(startTime)) return;
     const diff = startTime - now;
     const entry = { startTime, scheStrDtm: it.scheStrDtm, title: it.bdTit || '' };
