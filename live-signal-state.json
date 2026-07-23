@@ -72,8 +72,8 @@
     "scheEndDtm": null
   },
   "V1_master": {
-    "onair": false,
-    "scheEndDtm": "2026-07-23T22:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-07-24T08:59:59+09:00"
   },
   "V1_slave": {
     "onair": false,
