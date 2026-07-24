@@ -64,5 +64,11 @@
     "type": "signal-loss",
     "studio": "M1",
     "message": "M1 스튜디오 MASTER 신호가 끊겼습니다."
+  },
+  {
+    "time": "2026-07-24T04:00:50.461Z",
+    "type": "signal-loss",
+    "studio": "V3",
+    "message": "V3 스튜디오 MASTER 신호가 끊겼습니다."
   }
 ]
