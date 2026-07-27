@@ -40,7 +40,7 @@
     "scheEndDtm": null
   },
   "A_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-07-27T20:59:59+09:00"
   },
   "A_slave": {
