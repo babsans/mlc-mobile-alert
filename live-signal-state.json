@@ -8,7 +8,7 @@
     "scheEndDtm": null
   },
   "M2_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-01T20:59:59+09:00"
   },
   "M2_slave": {
