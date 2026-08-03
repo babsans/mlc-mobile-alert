@@ -64,7 +64,7 @@
     "scheEndDtm": null
   },
   "E_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-03T22:44:59+09:00"
   },
   "E_slave": {
