@@ -80,8 +80,8 @@
     "scheEndDtm": null
   },
   "V2_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-05T23:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-06T08:20:59+09:00"
   },
   "V2_slave": {
     "onair": false,
