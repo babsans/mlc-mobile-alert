@@ -1,7 +1,7 @@
 {
   "M1_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-05T19:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-05T21:59:59+09:00"
   },
   "M1_slave": {
     "onair": false,
@@ -64,7 +64,7 @@
     "scheEndDtm": null
   },
   "E_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-05T20:59:59+09:00"
   },
   "E_slave": {
@@ -80,15 +80,15 @@
     "scheEndDtm": null
   },
   "V2_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-05T19:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-05T22:00:59+09:00"
   },
   "V2_slave": {
     "onair": false,
     "scheEndDtm": null
   },
   "V3_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-05T20:59:59+09:00"
   },
   "V3_slave": {
