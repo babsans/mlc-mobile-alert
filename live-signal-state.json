@@ -32,7 +32,7 @@
     "scheEndDtm": null
   },
   "M6_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-06T11:59:59+09:00"
   },
   "M6_slave": {
