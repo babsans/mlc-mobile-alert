@@ -8,16 +8,16 @@
     "scheEndDtm": null
   },
   "M2_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-06T20:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-07T10:59:59+09:00"
   },
   "M2_slave": {
     "onair": false,
     "scheEndDtm": null
   },
   "M3_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-06T21:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-07T10:59:59+09:00"
   },
   "M3_slave": {
     "onair": false,
@@ -72,8 +72,8 @@
     "scheEndDtm": null
   },
   "V1_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-07T09:01:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-07T10:59:59+09:00"
   },
   "V1_slave": {
     "onair": false,
@@ -88,8 +88,8 @@
     "scheEndDtm": null
   },
   "V3_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-06T22:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-07T10:59:59+09:00"
   },
   "V3_slave": {
     "onair": false,
