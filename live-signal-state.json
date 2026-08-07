@@ -24,7 +24,7 @@
     "scheEndDtm": null
   },
   "M5_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-07T09:59:59+09:00"
   },
   "M5_slave": {
@@ -80,7 +80,7 @@
     "scheEndDtm": null
   },
   "V2_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-07T09:59:59+09:00"
   },
   "V2_slave": {
