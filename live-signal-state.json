@@ -8,7 +8,7 @@
     "scheEndDtm": null
   },
   "M2_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-14T11:59:59+09:00"
   },
   "M2_slave": {
@@ -16,7 +16,7 @@
     "scheEndDtm": null
   },
   "M3_master": {
-    "onair": true,
+    "onair": false,
     "scheEndDtm": "2026-08-14T11:59:59+09:00"
   },
   "M3_slave": {
@@ -72,8 +72,8 @@
     "scheEndDtm": null
   },
   "V1_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-14T10:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-14T12:59:59+09:00"
   },
   "V1_slave": {
     "onair": false,
