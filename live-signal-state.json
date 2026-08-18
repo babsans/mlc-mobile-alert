@@ -1,7 +1,7 @@
 {
   "M1_master": {
-    "onair": false,
-    "scheEndDtm": "2026-08-17T20:59:59+09:00"
+    "onair": true,
+    "scheEndDtm": "2026-08-18T09:59:59+09:00"
   },
   "M1_slave": {
     "onair": false,
