@@ -48,8 +48,8 @@
     "scheEndDtm": null
   },
   "B_master": {
-    "onair": false,
-    "scheEndDtm": null
+    "onair": true,
+    "scheEndDtm": "2026-08-20T21:44:59+09:00"
   },
   "B_slave": {
     "onair": false,
